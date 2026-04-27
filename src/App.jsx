@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
-import AIChatAssistant from './features/assistant/AIChatAssistant';
-import { buildAssistantContext } from './features/assistant/assistantContext';
+import AIChatAssistant from './components/AIChatAssistant';
+import { buildAssistantContext } from './services/assistantContext';
 
 const OPTIMIZER_URL =
   import.meta.env.VITE_OPTIMIZER_URL || 'https://DevNumb-MLYorkchillerOptimzer.hf.space';

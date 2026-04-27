@@ -1,43 +1,72 @@
+/**
+ * AI Assistant API - Vercel Serverless Function
+ * Handles chat requests to OpenRouter API
+ * 
+ * Environment Variables (set in Vercel Dashboard):
+ * - OPENAI_API_KEY: Your OpenRouter API key
+ */
+
 export default async function handler(req, res) {
+  // Set CORS headers
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+
+  // Handle preflight
+  if (req.method === 'OPTIONS') {
+    return res.status(200).end();
+  }
+
   // Only allow POST requests
   if (req.method !== 'POST') {
-    return res.status(405).json({ error: 'Method not allowed' });
+    return res.status(405).json({ error: 'Method not allowed. Use POST.' });
   }
 
-  const { question, context, systemPrompt } = req.body;
+  const { question, context } = req.body;
 
-  if (!question) {
-    return res.status(400).json({ error: 'Question is required' });
+  // Validate question
+  if (!question || typeof question !== 'string') {
+    return res.status(400).json({ error: 'Question is required and must be a string.' });
   }
 
-  // Get API key from server-side environment variable (never exposed to client)
-  // Try both OPENROUTER_API_KEY (recommended) and OPENAI_API_KEY (legacy)
-  const apiKey = process.env.OPENROUTER_API_KEY || process.env.OPENAI_API_KEY;
+  if (question.trim().length === 0) {
+    return res.status(400).json({ error: 'Question cannot be empty.' });
+  }
+
+  if (question.length > 2000) {
+    return res.status(400).json({ error: 'Question is too long. Maximum 2000 characters.' });
+  }
+
+  // Get API key from server-side environment variable (NEVER from .env file)
+  const apiKey = process.env.OPENAI_API_KEY;
 
   if (!apiKey) {
-    console.error('OPENROUTER_API_KEY or OPENAI_API_KEY not configured in environment variables');
-    return res.status(500).json({ error: 'Server configuration error: API key not set. Please add OPENROUTER_API_KEY in Vercel dashboard settings.' });
+    console.error('[Assistant] OPENAI_API_KEY not configured in Vercel environment variables');
+    return res.status(500).json({ error: 'Server configuration error: API key not set. Please add OPENAI_API_KEY in Vercel dashboard settings.' });
   }
+
+  if (apiKey === 'your-actual-key-goes-in-vercel-dashboard-not-here') {
+    console.error('[Assistant] Using placeholder API key - not configured in Vercel');
+    return res.status(500).json({ error: 'API key not configured. Please add OPENAI_API_KEY in Vercel dashboard.' });
+  }
+
+  console.log('[Assistant] Received question:', question.substring(0, 100));
+  console.log('[Assistant] Context keys:', context ? Object.keys(context) : 'none');
 
   try {
     // Build messages for OpenRouter API
     const messages = [];
 
-    // Add system prompt if provided
-    if (systemPrompt) {
-      messages.push({ role: 'system', content: systemPrompt });
-    }
+    // System prompt
+    messages.push({
+      role: 'system',
+      content: `You are an energy efficiency assistant for a chiller plant. Help operators understand optimization recommendations and fault detections. Be concise, practical, and focused on energy savings. Current context: ${JSON.stringify(context || {})}`
+    });
 
-    // Add context as user message if provided
-    if (context && Object.keys(context).length > 0) {
-      messages.push({
-        role: 'user',
-        content: `Context: ${JSON.stringify(context)}`
-      });
-    }
-
-    // Add the actual question
+    // User question
     messages.push({ role: 'user', content: question });
+
+    console.log('[Assistant] Making request to OpenRouter with model: google/gemma-2-9b-it:free');
 
     // Make request to OpenRouter API
     const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
@@ -49,49 +78,59 @@ export default async function handler(req, res) {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        model: 'google/gemini-2.0-flash-exp:free',
+        model: 'google/gemma-2-9b-it:free',
         messages: messages,
         max_tokens: 1000,
         temperature: 0.7,
       }),
     });
 
+    console.log('[Assistant] OpenRouter response status:', response.status);
+
     // Handle specific error codes
     if (response.status === 401) {
-      console.error('OpenRouter API error: Invalid API key');
-      return res.status(401).json({ error: 'Invalid API key. Please check your OpenRouter API key.' });
+      console.error('[Assistant] OpenRouter API error: Invalid API key');
+      return res.status(401).json({ error: 'Invalid API key. Please check your OpenRouter API key in Vercel settings.' });
     }
 
     if (response.status === 403) {
-      console.error('OpenRouter API error: Permission denied');
+      console.error('[Assistant] OpenRouter API error: Permission denied');
       return res.status(403).json({ error: 'Permission denied. Check your API key permissions.' });
     }
 
     if (response.status === 429) {
-      console.error('OpenRouter API error: Rate limit exceeded');
-      return res.status(429).json({ error: 'Rate limit exceeded. Please try again later.' });
+      console.error('[Assistant] OpenRouter API error: Rate limit exceeded');
+      return res.status(429).json({ error: 'Rate limit exceeded. Please try again in a few seconds.' });
+    }
+
+    if (response.status === 404) {
+      console.error('[Assistant] OpenRouter API error: Model not found');
+      return res.status(500).json({ error: 'Model not available. Please try a different model.' });
     }
 
     if (!response.ok) {
       const errorText = await response.text();
-      console.error('OpenRouter API error:', response.status, errorText);
+      console.error('[Assistant] OpenRouter API error:', response.status, errorText);
       return res.status(500).json({ error: `OpenRouter API error: ${response.status}` });
     }
 
     const data = await response.json();
+    console.log('[Assistant] Received response from OpenRouter');
 
     // Extract the assistant's reply
     const reply = data.choices?.[0]?.message?.content || '';
 
     if (!reply) {
-      console.error('No response content from OpenRouter:', data);
-      return res.status(500).json({ error: 'No response from AI model' });
+      console.error('[Assistant] No response content from OpenRouter:', data);
+      return res.status(500).json({ error: 'No response from AI model. Please try again.' });
     }
+
+    console.log('[Assistant] Sending reply to client, length:', reply.length);
 
     return res.status(200).json({ reply });
 
   } catch (error) {
-    console.error('Assistant API error:', error.message);
+    console.error('[Assistant] Server error:', error.message);
     return res.status(500).json({ error: `Server error: ${error.message}` });
   }
 }
