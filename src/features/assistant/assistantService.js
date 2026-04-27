@@ -1,7 +1,10 @@
-import { ASSISTANT_API_URL, ASSISTANT_SYSTEM_PROMPT } from './assistantConfig';
+import { ASSISTANT_SYSTEM_PROMPT } from './assistantConfig';
+
+// Use relative API path - Vercel will route /api/assistant to the serverless function
+const API_PATH = '/api/assistant';
 
 export async function sendAssistantMessage({ question, context }) {
-  const response = await fetch(ASSISTANT_API_URL, {
+  const response = await fetch(API_PATH, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
