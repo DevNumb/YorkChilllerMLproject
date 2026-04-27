@@ -49,7 +49,7 @@ export default async function handler(req, res) {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        model: 'google/gemma-2-9b-it:free',
+        model: 'google/gemini-2.0-flash-exp:free',
         messages: messages,
         max_tokens: 1000,
         temperature: 0.7,
