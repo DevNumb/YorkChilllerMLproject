@@ -11,11 +11,12 @@ export default async function handler(req, res) {
   }
 
   // Get API key from server-side environment variable (never exposed to client)
-  const apiKey = process.env.OPENAI_API_KEY;
+  // Try both OPENROUTER_API_KEY (recommended) and OPENAI_API_KEY (legacy)
+  const apiKey = process.env.OPENROUTER_API_KEY || process.env.OPENAI_API_KEY;
 
   if (!apiKey) {
-    console.error('OPENAI_API_KEY not configured in environment variables');
-    return res.status(500).json({ error: 'Server configuration error: API key not set' });
+    console.error('OPENROUTER_API_KEY or OPENAI_API_KEY not configured in environment variables');
+    return res.status(500).json({ error: 'Server configuration error: API key not set. Please add OPENROUTER_API_KEY in Vercel dashboard settings.' });
   }
 
   try {
