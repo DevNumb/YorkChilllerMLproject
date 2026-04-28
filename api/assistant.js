@@ -31,15 +31,18 @@ export default async function handler(req, res) {
   const configuredModel = process.env.OPENROUTER_MODEL;
   
   // Debug log (check Vercel logs)
-  console.log('API Key exists:', !!apiKey);
-  console.log('Model configured:', configuredModel || 'using default list');
+  console.log('All env vars:', Object.keys(process.env).filter(k => k.includes('API') || k.includes('MODEL') || k.includes('OPEN')));
+  console.log('OPENROUTER_API_KEY exists:', !!apiKey);
+  console.log('OPENROUTER_MODEL value:', configuredModel);
   console.log('Question received:', question.substring(0, 50));
 
   if (!apiKey) {
     console.error('OPENROUTER_API_KEY is missing from Vercel environment');
+    console.error('Available env keys:', Object.keys(process.env).join(', '));
     return res.status(500).json({ 
       error: 'API key not configured. Please add OPENROUTER_API_KEY to Vercel environment variables.',
-      details: 'Server missing API key'
+      details: 'Server missing API key',
+      availableVars: Object.keys(process.env).filter(k => k.includes('API') || k.includes('KEY'))
     });
   }
 
