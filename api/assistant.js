@@ -93,18 +93,28 @@ export default async function handler(req, res) {
       });
 
       if (response.status === 401) {
-        console.error('Invalid API key for model:', model);
+        const errorText = await response.text();
+        console.error('Invalid API key for model:', model, errorText);
+        lastError = new Error('Invalid API key');
         continue;
       }
 
       if (response.status === 429) {
-        console.error('Rate limit for model:', model);
+        const errorText = await response.text();
+        console.error('Rate limit for model:', model, errorText);
+        lastError = new Error('Rate limit exceeded');
         continue;
       }
 
       if (!response.ok) {
         const errorText = await response.text();
-        console.error(`Model ${model} failed:`, response.status, errorText);
+        let errorDetail = errorText;
+        try {
+          const errorJson = JSON.parse(errorText);
+          errorDetail = errorJson.error?.message || errorJson.detail || errorText;
+        } catch {}
+        console.error(`Model ${model} failed:`, response.status, errorDetail);
+        lastError = new Error(errorDetail);
         continue;
       }
 
@@ -129,6 +139,11 @@ export default async function handler(req, res) {
   console.error('All models failed. Last error:', lastError);
   return res.status(500).json({ 
     error: 'No AI models available. Please check your OpenRouter API key or try again later.',
-    details: lastError?.message || 'All models failed'
+    details: lastError?.message || 'All models failed',
+    debug: {
+      apiKeyExists: !!apiKey,
+      modelUsed: configuredModel || 'default list',
+      lastStatus: lastError?.message
+    }
   });
 }
