@@ -1,8 +1,10 @@
 /**
  * AI Assistant Service - Frontend API Client
  * Calls the serverless function at /api/assistant
+ * Works in both development and production
  */
 
+// Use relative API path - works on localhost (via Vercel dev) and production
 const API_PATH = '/api/assistant';
 
 /**

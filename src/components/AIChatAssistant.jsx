@@ -26,7 +26,7 @@ export default function AIChatAssistant({ context = {} }) {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
 
-  // Quick question suggestions based on context
+  // Quick question suggestions
   const quickQuestions = [
     'How can I reduce energy consumption?',
     'What do my current recommendations mean?',
@@ -65,29 +65,29 @@ export default function AIChatAssistant({ context = {} }) {
     }
   };
 
-  const handleQuickQuestion = async (question) => {
+  const handleQuickQuestion = (question) => {
     setInput(question);
-    // Trigger form submission
-    const form = document.getElementById('assistant-form');
-    if (form) {
-      form.dispatchEvent(new Event('submit', { bubbles: true }));
-    }
   };
 
   return (
-    <div className="assistant-container glass-card">
+    <div className="assistant-container">
       <div className="assistant-header">
-        <h3>🤖 Energy Assistant</h3>
-        <span className="assistant-status">
-          {isLoading ? 'Thinking...' : 'Ready'}
-        </span>
+        <div className="assistant-title">
+          <span className="assistant-icon"></span>
+          <h3>Energy Assistant</h3>
+        </div>
+        <div className={`assistant-status ${isLoading ? 'loading' : 'ready'}`}>
+          <span className="status-dot"></span>
+          {isLoading ? 'Thinking...' : 'Online'}
+        </div>
       </div>
 
       {/* Error Display */}
       {error && (
         <div className="assistant-error">
-          <span>⚠️ {error}</span>
-          <button onClick={() => setError(null)} className="error-dismiss">×</button>
+          <span className="error-icon">⚠️</span>
+          <span className="error-text">{error}</span>
+          <button onClick={() => setError(null)} className="error-dismiss" aria-label="Dismiss error">×</button>
         </div>
       )}
 
@@ -95,13 +95,19 @@ export default function AIChatAssistant({ context = {} }) {
       <div className="assistant-messages">
         {messages.map((msg, index) => (
           <div key={index} className={`message message-${msg.role}`}>
-            <div className="message-content">{msg.content}</div>
+            <div className="message-bubble">
+              <div className="message-text">{msg.content}</div>
+            </div>
           </div>
         ))}
         {isLoading && (
           <div className="message message-assistant">
-            <div className="message-content loading">
-              <span className="loading-dots">...</span>
+            <div className="message-bubble loading">
+              <div className="typing-indicator">
+                <span></span>
+                <span></span>
+                <span></span>
+              </div>
             </div>
           </div>
         )}
@@ -123,7 +129,7 @@ export default function AIChatAssistant({ context = {} }) {
       </div>
 
       {/* Input Form */}
-      <form id="assistant-form" className="assistant-input" onSubmit={handleSubmit}>
+      <form className="assistant-input" onSubmit={handleSubmit}>
         <input
           type="text"
           value={input}
@@ -131,9 +137,21 @@ export default function AIChatAssistant({ context = {} }) {
           placeholder="Ask about energy optimization..."
           disabled={isLoading}
           maxLength={2000}
+          className="assistant-text-input"
         />
-        <button type="submit" disabled={isLoading || !input.trim()}>
-          {isLoading ? '...' : '➤'}
+        <button 
+          type="submit" 
+          disabled={isLoading || !input.trim()} 
+          className="assistant-submit-btn"
+          aria-label="Send message"
+        >
+          {isLoading ? (
+            <span className="btn-loading">...</span>
+          ) : (
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z"/>
+            </svg>
+          )}
         </button>
       </form>
     </div>

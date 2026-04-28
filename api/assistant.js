@@ -26,23 +26,27 @@ export default async function handler(req, res) {
     return res.status(400).json({ error: 'Question is required' });
   }
 
-  // Read API key from Vercel environment
-  const apiKey = process.env.OPENAI_API_KEY;
+  // Read API key and model from Vercel environment
+  const apiKey = process.env.OPENROUTER_API_KEY;
+  const configuredModel = process.env.OPENROUTER_MODEL;
   
   // Debug log (check Vercel logs)
   console.log('API Key exists:', !!apiKey);
+  console.log('Model configured:', configuredModel || 'using default list');
   console.log('Question received:', question.substring(0, 50));
 
   if (!apiKey) {
-    console.error('OPENAI_API_KEY is missing from Vercel environment');
+    console.error('OPENROUTER_API_KEY is missing from Vercel environment');
     return res.status(500).json({ 
-      error: 'API key not configured. Please add OPENAI_API_KEY to Vercel environment variables.',
+      error: 'API key not configured. Please add OPENROUTER_API_KEY to Vercel environment variables.',
       details: 'Server missing API key'
     });
   }
 
-  // List of working free models on OpenRouter (trying multiple)
-  const models = [
+  // Use configured model or fall back to default list
+  const models = configuredModel 
+    ? [configuredModel]
+    : [
     'google/gemini-flash-1.5-8b-exp',
     'google/gemma-2-9b-it:free',
     'microsoft/phi-3-mini-128k-instruct:free',
