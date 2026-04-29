@@ -1,6 +1,8 @@
 const DEFAULT_MODEL = process.env.OPENROUTER_MODEL || 'openrouter/free';
 const DEFAULT_APP_URL = process.env.OPENROUTER_APP_URL || 'https://your-vercel-app.vercel.app';
 const DEFAULT_APP_NAME = process.env.OPENROUTER_APP_NAME || 'Chiller Energy Optimizer';
+const DEFAULT_SYSTEM_PROMPT =
+  'You are an energy efficiency assistant for a chiller plant. Help operators understand optimization recommendations and fault detections. Be concise and practical. When useful, return JSON only with keys: reply, suggestedTitle, and optional chart. The chart object may include type, title, unit, labels, and series where series is an array of { name, data }.';
 
 function extractFirstJsonObject(value) {
   if (!value || typeof value !== 'string') {
@@ -21,6 +23,68 @@ function extractFirstJsonObject(value) {
   } catch {
     return null;
   }
+}
+
+function buildDashboardSummary(context) {
+  if (!context || typeof context !== 'object') {
+    return 'No dashboard context available.';
+  }
+
+  const lines = [];
+
+  if (context.liveConditions) {
+    lines.push('Live conditions:');
+    lines.push(`  • Location: ${context.liveConditions.location || 'unknown'}`);
+    lines.push(`  • Source: ${context.liveConditions.source || 'manual'}`);
+    lines.push(`  • Outdoor temperature: ${context.liveConditions.outdoorTemperatureC ?? 'unknown'}°C`);
+    lines.push(`  • Humidity: ${context.liveConditions.humidityPct ?? 'unknown'}%`);
+    lines.push(`  • Wet bulb: ${context.liveConditions.wetBulbC ?? 'unknown'}°C`);
+  }
+
+  if (context.optimizationInputs) {
+    lines.push('Optimization operating point:');
+    lines.push(`  • Cooling load: ${context.optimizationInputs.coolingLoadTons ?? 'unknown'} tons`);
+    lines.push(`  • Current setpoint: ${context.optimizationInputs.currentChwSetpointC ?? 'unknown'}°C`);
+    lines.push(`  • Wet bulb: ${context.optimizationInputs.wetBulbC ?? 'unknown'}°C`);
+    lines.push(`  • Current limit: ${context.optimizationInputs.currentLimitPct ?? 'unknown'}%`);
+    lines.push(`  • Hour: ${context.optimizationInputs.hour ?? 'unknown'}`);
+    lines.push(`  • Month: ${context.optimizationInputs.month ?? 'unknown'}`);
+    lines.push(`  • Weekend: ${context.optimizationInputs.isWeekend ? 'yes' : 'no'}`);
+    lines.push(`  • Chillers running: ${context.optimizationInputs.chillersRunning ?? 'unknown'}`);
+  }
+
+  if (Array.isArray(context.optimizationHistory) && context.optimizationHistory.length) {
+    lines.push(`Optimization history (last ${context.optimizationHistory.length} items):`);
+    context.optimizationHistory.slice(0, 5).forEach((entry, index) => {
+      lines.push(`  ${index + 1}. ${entry.timestamp || 'unknown timestamp'} — current ${entry.currentEfficiencyKwPerTon ?? 'N/A'} kW/ton, optimal ${entry.optimalEfficiencyKwPerTon ?? 'N/A'} kW/ton, improvement ${entry.improvementPercent ?? 'N/A'}%`);
+    });
+  }
+
+  if (context.faultDetection) {
+    lines.push('Fault detection:');
+    lines.push(`  • Active faults: ${context.faultDetection.activeFaults ?? 0}`);
+    if (Array.isArray(context.faultDetection.alerts) && context.faultDetection.alerts.length) {
+      lines.push('  • Alerts:');
+      context.faultDetection.alerts.slice(0, 3).forEach((alert, index) => {
+        lines.push(`    ${index + 1}. ${alert}`);
+      });
+    }
+  }
+
+  if (context.systemMetrics) {
+    lines.push('System metrics:');
+    lines.push(`  • Current efficiency: ${context.systemMetrics.currentEfficiencyKwPerTon ?? 'unknown'} kW/ton`);
+    lines.push(`  • Optimal efficiency: ${context.systemMetrics.optimalEfficiencyKwPerTon ?? 'unknown'} kW/ton`);
+    lines.push(`  • Chillers running: ${context.systemMetrics.chillersRunning ?? 'unknown'}`);
+  }
+
+  return lines.join('\n');
+}
+
+function buildSystemPrompt(systemPrompt, context) {
+  const basePrompt = systemPrompt || DEFAULT_SYSTEM_PROMPT;
+  const dashboardSummary = buildDashboardSummary(context);
+  return `${basePrompt}\n\nUse the following dashboard snapshot to answer the user question accurately:\n${dashboardSummary}`;
 }
 
 function buildMessages({ question, context, conversation }) {
@@ -88,9 +152,7 @@ export default async function handler(req, res) {
         messages: [
           {
             role: 'system',
-            content:
-              systemPrompt ||
-              'You are an energy efficiency assistant for a chiller plant. Help operators understand optimization recommendations and fault detections. Be concise and practical. When useful, return JSON only with keys: reply, suggestedTitle, and optional chart. The chart object may include type, title, unit, labels, and series where series is an array of { name, data }.',
+            content: buildSystemPrompt(systemPrompt, context),
           },
           ...buildMessages({ question, context, conversation }),
         ],

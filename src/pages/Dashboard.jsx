@@ -5,6 +5,7 @@ const OPTIMIZER_URL =
   import.meta.env.VITE_OPTIMIZER_URL || 'https://DevNumb-MLYorkchillerOptimzer.hf.space';
 const WEATHER_URL = import.meta.env.VITE_WEATHER_URL || 'https://api.open-meteo.com/v1/forecast';
 const HISTORY_KEY = 'chiller-optimizer-history-v1';
+const DASHBOARD_CONTEXT_KEY = 'chiller-dashboard-context-v1';
 
 const defaultLocation = {
   latitude: 36.8065,
@@ -298,6 +299,19 @@ function formatCurrency(value) {
   }).format(value);
 }
 
+function persistDashboardContext(payload) {
+  if (typeof window === 'undefined' || !window?.localStorage) {
+    return;
+  }
+
+  try {
+    window.__DASHBOARD_CONTEXT__ = payload;
+    window.localStorage.setItem(DASHBOARD_CONTEXT_KEY, JSON.stringify(payload));
+  } catch {
+    // Silent fail if storage is unavailable.
+  }
+}
+
 function formatTimestamp(dateLike) {
   return new Intl.DateTimeFormat('en-US', {
     dateStyle: 'medium',
@@ -474,6 +488,58 @@ export default function Dashboard() {
       }),
     [weather, inputs, result],
   );
+
+  useEffect(() => {
+    persistDashboardContext({
+      liveConditions: {
+        location: weather.location || 'Unknown site',
+        source: weather.source || 'manual',
+        outdoorTemperatureC: weather.temperature ?? null,
+        humidityPct: weather.humidity ?? null,
+        wetBulbC: weather.wetBulb ?? null,
+        weatherError: weather.error || '',
+      },
+      optimizationInputs: {
+        coolingLoadTons: inputs.load_tons ?? null,
+        wetBulbC: inputs.wet_bulb_c ?? null,
+        currentChwSetpointC: inputs.current_chw_setpoint_c ?? null,
+        currentLimitPct: inputs.current_limit_pct ?? null,
+        hour: inputs.hour ?? null,
+        month: inputs.month ?? null,
+        isWeekend: inputs.is_weekend === 1,
+        chillersRunning: inputs.chillers_running ?? null,
+      },
+      optimizationHistory: history.map((entry) => ({
+        timestamp: entry.timestamp || null,
+        coolingLoadTons: entry.inputs?.load_tons ?? null,
+        wetBulbC: entry.inputs?.wet_bulb_c ?? null,
+        currentChwSetpointC: entry.inputs?.current_chw_setpoint_c ?? null,
+        currentLimitPct: entry.inputs?.current_limit_pct ?? null,
+        hour: entry.inputs?.hour ?? null,
+        month: entry.inputs?.month ?? null,
+        isWeekend: entry.inputs?.is_weekend === 1,
+        chillersRunning: entry.inputs?.chillers_running ?? null,
+        currentEfficiencyKwPerTon: entry.result?.currentEfficiency ?? null,
+        optimalEfficiencyKwPerTon: entry.result?.optimalEfficiency ?? null,
+        improvementPercent: entry.result?.improvementPercent ?? null,
+        energySavingsKwh: entry.result?.energySavingsKwh ?? null,
+        costSavingsUsd: entry.result?.costSavingsUsd ?? null,
+        co2ReductionKg: entry.result?.co2ReductionKg ?? null,
+        recommendedSetpointC: entry.result?.recommendedSetpoint ?? null,
+        operatorAction: entry.result?.operatorAction || '',
+      })),
+      faultDetection: {
+        activeFaults: 0,
+        alerts: [],
+      },
+      systemMetrics: {
+        currentEfficiencyKwPerTon: result?.result?.currentEfficiency ?? null,
+        optimalEfficiencyKwPerTon: result?.result?.optimalEfficiency ?? null,
+        chillersRunning: inputs.chillers_running ?? null,
+      },
+      capturedAt: new Date().toISOString(),
+    });
+  }, [weather, inputs, history, result]);
 
   function updateInput(name, rawValue) {
     const bounds = {

@@ -1,6 +1,8 @@
 import { ASSISTANT_API_URL, ASSISTANT_DEFAULT_MODEL } from './assistantConfig.js';
+import { getDashboardContext } from './dashboardContext.js'; // ADDED
 
 export async function sendAssistantMessage({ question, context, conversation, settings }) {
+  const dashboardContext = getDashboardContext(); // ADDED
   const response = await fetch(settings?.apiUrl || ASSISTANT_API_URL, {
     method: 'POST',
     headers: {
@@ -8,7 +10,10 @@ export async function sendAssistantMessage({ question, context, conversation, se
     },
     body: JSON.stringify({
       question,
-      context: context || {},
+      context: {
+        ...dashboardContext, // ADDED
+        ...(context || {}),
+      },
       conversation: conversation || [],
       model: settings?.model || ASSISTANT_DEFAULT_MODEL,
     }),
