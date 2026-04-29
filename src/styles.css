@@ -168,6 +168,141 @@ button {
   align-items: start;
 }
 
+/* NEW REDESIGNED LAYOUT STYLES */
+.dashboard-grid-redesign {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+.grid-row {
+  display: grid;
+  gap: 1.5rem;
+}
+
+.row-3-cols {
+  grid-template-columns: repeat(3, 1fr);
+}
+
+.row-2-cols {
+  grid-template-columns: 1fr 1fr;
+}
+
+.row-full {
+  grid-template-columns: 1fr;
+}
+
+/* System Status Card */
+.system-status-card {
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: 24px;
+  padding: 24px;
+  backdrop-filter: blur(18px);
+  box-shadow: var(--shadow);
+}
+
+.system-status-header {
+  margin-bottom: 20px;
+}
+
+.system-status-header .section-label {
+  margin: 0 0 6px;
+  text-transform: uppercase;
+  letter-spacing: 0.18em;
+  font-size: 0.75rem;
+  color: var(--accent);
+}
+
+.system-status-header h2 {
+  margin: 0;
+  font-weight: 700;
+  letter-spacing: -0.03em;
+}
+
+.system-status-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  margin-bottom: 20px;
+}
+
+.status-item {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 14px;
+  padding: 14px 18px;
+}
+
+.status-icon {
+  font-size: 1.5rem;
+  width: 44px;
+  height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(100, 214, 255, 0.1);
+  border-radius: 12px;
+}
+
+.status-info {
+  display: flex;
+  flex-direction: column;
+}
+
+.status-label {
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+
+.status-value {
+  font-size: 1.15rem;
+  font-weight: 600;
+}
+
+.system-status-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding-top: 16px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.efficiency-badge {
+  padding: 8px 16px;
+  border-radius: 999px;
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
+.last-update {
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+
+/* Responsive */
+@media (max-width: 1200px) {
+  .row-3-cols {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  .row-3-cols > *:nth-child(3) {
+    grid-column: span 2;
+  }
+}
+
+@media (max-width: 900px) {
+  .row-3-cols,
+  .row-2-cols {
+    grid-template-columns: 1fr;
+  }
+  .row-3-cols > *:nth-child(3) {
+    grid-column: span 1;
+  }
+}
+
 .panel-stack {
   padding: 24px;
 }

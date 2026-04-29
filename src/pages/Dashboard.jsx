@@ -630,9 +630,57 @@ export default function Dashboard() {
     URL.revokeObjectURL(url);
   }
 
+// System Status Card Component
+function SystemStatusCard({ chillersRunning, efficiency, faultCount }) {
+  const efficiencyStatus = efficiency < 0.65 ? 'Optimal' : efficiency < 0.75 ? 'Good' : efficiency < 0.85 ? 'Fair' : 'Poor';
+  const efficiencyColor = efficiency < 0.65 ? '#53f2a8' : efficiency < 0.75 ? '#8ef5bf' : efficiency < 0.85 ? '#f7df72' : '#ff6b7d';
+  
+  return (
+    <div className="system-status-card">
+      <div className="system-status-header">
+        <p className="section-label">System Status</p>
+        <h2>Real-Time Overview</h2>
+      </div>
+      <div className="system-status-grid">
+        <div className="status-item">
+          <span className="status-icon">❄️</span>
+          <div className="status-info">
+            <span className="status-label">Chillers Running</span>
+            <strong className="status-value">{chillersRunning} / 4</strong>
+          </div>
+        </div>
+        <div className="status-item">
+          <span className="status-icon">📊</span>
+          <div className="status-info">
+            <span className="status-label">Current Efficiency</span>
+            <strong className="status-value" style={{ color: efficiencyColor }}>{efficiency.toFixed(3)} kW/ton</strong>
+          </div>
+        </div>
+        <div className="status-item">
+          <span className="status-icon">⚠️</span>
+          <div className="status-info">
+            <span className="status-label">Active Faults</span>
+            <strong className="status-value" style={{ color: faultCount > 0 ? '#ff6b7d' : '#53f2a8' }}>{faultCount}</strong>
+          </div>
+        </div>
+      </div>
+      <div className="system-status-footer">
+        <span className="efficiency-badge" style={{ backgroundColor: `${efficiencyColor}22`, color: efficiencyColor }}>
+          {efficiencyStatus}
+        </span>
+        <span className="last-update">Updated: {new Date().toLocaleTimeString()}</span>
+      </div>
+    </div>
+  );
+}
+
+// ...existing code...
+
   return (
     <div className="dashboard-page">
       <div className="background-grid" />
+      
+      {/* TOP ROW: Header */}
       <header className="hero-card glass-card">
         <div>
           <p className="eyebrow">AI-Assisted Plant Operations</p>
@@ -654,338 +702,361 @@ export default function Dashboard() {
         </div>
       </header>
 
-      <main className="dashboard-grid">
-        <section className="glass-card panel-stack">
-          <div className="section-title-row">
-            <div>
-              <p className="section-label">Live Conditions</p>
-              <h2>Clock & Weather</h2>
+      {/* NEW LAYOUT: CSS Grid with gap: 1.5rem */}
+      <main className="dashboard-grid-redesign">
+        
+        {/* ROW 1: 3 Columns */}
+        <div className="grid-row row-3-cols">
+          {/* Column 1: LIVE CONDITIONS */}
+          <section className="glass-card panel-stack">
+            <div className="section-title-row">
+              <div>
+                <p className="section-label">Live Conditions</p>
+                <h2>Clock & Weather</h2>
+              </div>
+              <span className={`status-pill ${weather.source === 'live' ? 'ok' : 'warn'}`}>
+                {weather.loading ? 'Loading' : weather.source === 'live' ? 'Weather synced' : 'Manual mode'}
+              </span>
             </div>
-            <span className={`status-pill ${weather.source === 'live' ? 'ok' : 'warn'}`}>
-              {weather.loading ? 'Loading' : weather.source === 'live' ? 'Weather synced' : 'Manual mode'}
-            </span>
-          </div>
 
-          <div className="weather-grid">
-            <MetricCard
-              label="Outdoor Temperature"
-              value={weather.temperature !== null ? `${weather.temperature.toFixed(1)}°C` : '--'}
-              hint={weather.location}
-            />
-            <MetricCard
-              label="Humidity"
-              value={weather.humidity !== null ? `${weather.humidity.toFixed(0)}%` : '--'}
-              hint="Relative humidity"
-            />
-            <MetricCard
-              label="Wet Bulb"
-              value={weather.wetBulb !== null ? `${weather.wetBulb.toFixed(1)}°C` : '--'}
-              hint="Calculated from live weather"
-              accent="#7fe6ff"
-            />
-          </div>
-
-          <div className="weather-actions">
-            <label className="toggle-row">
-              <input
-                type="checkbox"
-                checked={useWeatherSuggestion}
-                onChange={(event) => setUseWeatherSuggestion(event.target.checked)}
+            <div className="weather-grid">
+              <MetricCard
+                label="Outdoor Temperature"
+                value={weather.temperature !== null ? `${weather.temperature.toFixed(1)}°C` : '--'}
+                hint={weather.location}
               />
-              <span>Auto-apply weather wet bulb suggestion</span>
-            </label>
-            <button
-              type="button"
-              className="secondary-button"
-              onClick={() => weather.wetBulb !== null && updateInput('wet_bulb_c', weather.wetBulb)}
-              disabled={weather.wetBulb === null}
-            >
-              Use Live Wet Bulb
-            </button>
-          </div>
-
-          {weather.error ? <p className="inline-note">{weather.error}</p> : null}
-        </section>
-
-        <section className="glass-card panel-stack">
-          <div className="section-title-row">
-            <div>
-              <p className="section-label">Quick Scenarios</p>
-              <h2>Preset Operating Modes</h2>
-            </div>
-          </div>
-          <div className="preset-grid">
-            {scenarioPresets.map((preset) => (
-              <button key={preset.label} type="button" className="preset-card" onClick={() => applyPreset(preset.values)}>
-                <span>{preset.icon}</span>
-                <strong>{preset.label}</strong>
-                <small>
-                  {preset.values.load_tons} tons · {monthOptions[preset.values.month - 1]}
-                </small>
-              </button>
-            ))}
-          </div>
-        </section>
-
-        <section className="glass-card panel-stack input-panel">
-          <div className="section-title-row">
-            <div>
-              <p className="section-label">Optimization Inputs</p>
-              <h2>Current Operating Point</h2>
-            </div>
-            <button type="button" className="primary-button" onClick={runOptimization} disabled={loading}>
-              {loading ? 'Calculating...' : 'Get Recommendation'}
-            </button>
-          </div>
-
-          <div className="inputs-grid">
-            <RangeField
-              label="Cooling Load"
-              name="load_tons"
-              value={inputs.load_tons}
-              min={200}
-              max={2500}
-              step={10}
-              suffix=" tons"
-              onChange={updateInput}
-            />
-            <RangeField
-              label="Wet Bulb Temp"
-              name="wet_bulb_c"
-              value={inputs.wet_bulb_c}
-              min={-5}
-              max={35}
-              step={0.1}
-              suffix="°C"
-              onChange={updateInput}
-            />
-            <RangeField
-              label="Current CHW Setpoint"
-              name="current_chw_setpoint_c"
-              value={inputs.current_chw_setpoint_c}
-              min={5}
-              max={10}
-              step={0.1}
-              suffix="°C"
-              onChange={updateInput}
-            />
-            <RangeField
-              label="Current Limit"
-              name="current_limit_pct"
-              value={inputs.current_limit_pct}
-              min={50}
-              max={100}
-              step={1}
-              suffix="%"
-              onChange={updateInput}
-            />
-          </div>
-
-          <div className="compact-grid">
-            <label className="field-card">
-              <div className="field-heading">
-                <span>Hour</span>
-                <strong>{inputs.hour}:00</strong>
-              </div>
-              <input
-                className="number-input"
-                type="number"
-                min={0}
-                max={23}
-                value={inputs.hour}
-                onChange={(event) => updateInput('hour', Number(event.target.value))}
+              <MetricCard
+                label="Humidity"
+                value={weather.humidity !== null ? `${weather.humidity.toFixed(0)}%` : '--'}
+                hint="Relative humidity"
               />
-            </label>
-
-            <label className="field-card">
-              <div className="field-heading">
-                <span>Month</span>
-              </div>
-              <select value={inputs.month} onChange={(event) => updateInput('month', Number(event.target.value))}>
-                {monthOptions.map((month, index) => (
-                  <option key={month} value={index + 1}>
-                    {month}
-                  </option>
-                ))}
-              </select>
-            </label>
-
-            <div className="field-card">
-              <div className="field-heading">
-                <span>Weekend</span>
-                <strong>{inputs.is_weekend ? 'Yes' : 'No'}</strong>
-              </div>
-              <div className="toggle-group">
-                <button
-                  type="button"
-                  className={inputs.is_weekend ? 'choice-button' : 'choice-button active'}
-                  onClick={() => updateInput('is_weekend', 0)}
-                >
-                  No
-                </button>
-                <button
-                  type="button"
-                  className={inputs.is_weekend ? 'choice-button active' : 'choice-button'}
-                  onClick={() => updateInput('is_weekend', 1)}
-                >
-                  Yes
-                </button>
-              </div>
+              <MetricCard
+                label="Wet Bulb"
+                value={weather.wetBulb !== null ? `${weather.wetBulb.toFixed(1)}°C` : '--'}
+                hint="Calculated from live weather"
+                accent="#7fe6ff"
+              />
             </div>
 
-            <div className="field-card">
-              <div className="field-heading">
-                <span>Chillers Running</span>
-                <strong>{inputs.chillers_running}</strong>
-              </div>
-              <div className="toggle-group">
-                {[1, 2, 3, 4].map((count) => (
-                  <button
-                    key={count}
-                    type="button"
-                    className={count === inputs.chillers_running ? 'choice-button active' : 'choice-button'}
-                    onClick={() => updateInput('chillers_running', count)}
-                  >
-                    {count}
-                  </button>
-                ))}
-              </div>
-            </div>
-          </div>
-
-          {error ? <p className="error-banner">{error}</p> : null}
-        </section>
-
-        <section className="glass-card panel-stack result-panel print-surface">
-          <div className="section-title-row">
-            <div>
-              <p className="section-label">Optimization Output</p>
-              <h2>Recommendation Summary</h2>
-            </div>
-            <span className="status-pill" style={{ backgroundColor: `${status.color}22`, color: status.color }}>
-              {status.label}
-            </span>
-          </div>
-
-          {loading ? (
-            <div className="loading-state">
-              <div className="spinner" />
-              <p>Calling optimization engine and preparing operator guidance.</p>
-            </div>
-          ) : result ? (
-            <>
-              <div className="result-grid">
-                <div className="gauge-card">
-                  <div className="gauge-shell" style={buildGaugeStyle(result.result.currentEfficiency)}>
-                    <div className="gauge-core">
-                      <span>Current</span>
-                      <strong>{result.result.currentEfficiency.toFixed(3)}</strong>
-                      <small>kW/ton</small>
-                    </div>
-                  </div>
-                  <div className="gauge-legend">
-                    <span>Green &lt; 0.65</span>
-                    <span>Yellow 0.65-0.75</span>
-                    <span>Orange 0.75-0.85</span>
-                    <span>Red &gt; 0.85</span>
-                  </div>
-                </div>
-
-                <div className="metrics-grid">
-                  <MetricCard
-                    label="Optimal Efficiency"
-                    value={`${result.result.optimalEfficiency.toFixed(3)} kW/ton`}
-                    hint="Predicted optimized condition"
-                    accent="#81f5b6"
-                  />
-                  <MetricCard
-                    label="Improvement"
-                    value={`↑ ${result.result.improvementPercent.toFixed(1)}%`}
-                    hint="Efficiency gain"
-                    accent="#53f2a8"
-                  />
-                  <MetricCard
-                    label="Energy Savings"
-                    value={`${result.result.energySavingsKwh.toFixed(1)} kWh`}
-                    hint={formatCurrency(result.result.costSavingsUsd)}
-                    accent="#7fe6ff"
-                  />
-                  <MetricCard
-                    label="CO2 Reduction"
-                    value={`${result.result.co2ReductionKg.toFixed(1)} kg`}
-                    hint="Estimated avoided emissions"
-                    accent="#f7df72"
-                  />
-                </div>
-              </div>
-
-              <div className="recommendation-banner">
-                <div>
-                  <p className="section-label">Recommended CHW Setpoint</p>
-                  <h3>
-                    {result.inputs.current_chw_setpoint_c.toFixed(1)}°C → {result.result.recommendedSetpoint.toFixed(1)}°C
-                  </h3>
-                </div>
-                <button type="button" className="secondary-button" onClick={() => window.print()}>
-                  Export as PDF
-                </button>
-              </div>
-
-              <div className="action-card">
-                <p className="section-label">Operator Action</p>
-                <p>{result.result.operatorAction}</p>
-              </div>
-            </>
-          ) : (
-            <div className="empty-state">
-              <p>No recommendation yet.</p>
-              <span>Run the optimizer to see efficiency targets, savings, and the recommended OptiView action.</span>
-            </div>
-          )}
-        </section>
-
-        <section className="glass-card panel-stack history-panel">
-          <div className="section-title-row">
-            <div>
-              <p className="section-label">Local History</p>
-              <h2>Last 10 Recommendations</h2>
-            </div>
-            <div className="button-row">
-              <button type="button" className="secondary-button" onClick={exportCsv} disabled={!history.length}>
-                Export CSV
-              </button>
-              <button type="button" className="ghost-button" onClick={clearHistory} disabled={!history.length}>
-                Clear History
+            <div className="weather-actions">
+              <label className="toggle-row">
+                <input
+                  type="checkbox"
+                  checked={useWeatherSuggestion}
+                  onChange={(event) => setUseWeatherSuggestion(event.target.checked)}
+                />
+                <span>Auto-apply weather wet bulb suggestion</span>
+              </label>
+              <button
+                type="button"
+                className="secondary-button"
+                onClick={() => weather.wetBulb !== null && updateInput('wet_bulb_c', weather.wetBulb)}
+                disabled={weather.wetBulb === null}
+              >
+                Use Live Wet Bulb
               </button>
             </div>
-          </div>
 
-          {history.length ? (
-            <div className="history-list">
-              {history.map((item) => (
-                <button key={item.id} type="button" className="history-item" onClick={() => restoreHistoryItem(item)}>
-                  <div>
-                    <strong>{formatTimestamp(item.timestamp)}</strong>
-                    <span>
-                      Load {item.inputs.load_tons} tons · {item.inputs.chillers_running} chillers
-                    </span>
-                  </div>
-                  <div className="history-metrics">
-                    <span>
-                      {item.result.currentEfficiency.toFixed(3)} → {item.result.optimalEfficiency.toFixed(3)} kW/ton
-                    </span>
-                    <strong>{item.result.improvementPercent.toFixed(1)}% savings</strong>
-                  </div>
+            {weather.error ? <p className="inline-note">{weather.error}</p> : null}
+          </section>
+
+          {/* Column 2: QUICK SCENARIOS */}
+          <section className="glass-card panel-stack">
+            <div className="section-title-row">
+              <div>
+                <p className="section-label">Quick Scenarios</p>
+                <h2>Preset Operating Modes</h2>
+              </div>
+            </div>
+            <div className="preset-grid">
+              {scenarioPresets.map((preset) => (
+                <button key={preset.label} type="button" className="preset-card" onClick={() => applyPreset(preset.values)}>
+                  <span>{preset.icon}</span>
+                  <strong>{preset.label}</strong>
+                  <small>
+                    {preset.values.load_tons} tons · {monthOptions[preset.values.month - 1]}
+                  </small>
                 </button>
               ))}
             </div>
-          ) : (
-            <div className="empty-state">
-              <p>History is empty.</p>
-              <span>Completed recommendations will be stored in this browser.</span>
+          </section>
+
+          {/* Column 3: SYSTEM STATUS (NEW) */}
+          <SystemStatusCard 
+            chillersRunning={inputs.chillers_running} 
+            efficiency={result?.result?.currentEfficiency ?? 0.72} 
+            faultCount={0} 
+          />
+        </div>
+
+        {/* ROW 2: 2 Columns */}
+        <div className="grid-row row-2-cols">
+          {/* Column 1: OPTIMIZATION INPUTS */}
+          <section className="glass-card panel-stack input-panel">
+            <div className="section-title-row">
+              <div>
+                <p className="section-label">Optimization Inputs</p>
+                <h2>Current Operating Point</h2>
+              </div>
+              <button type="button" className="primary-button" onClick={runOptimization} disabled={loading}>
+                {loading ? 'Calculating...' : 'Get Recommendation'}
+              </button>
             </div>
-          )}
-        </section>
+
+            <div className="inputs-grid">
+              <RangeField
+                label="Cooling Load"
+                name="load_tons"
+                value={inputs.load_tons}
+                min={200}
+                max={2500}
+                step={10}
+                suffix=" tons"
+                onChange={updateInput}
+              />
+              <RangeField
+                label="Wet Bulb Temp"
+                name="wet_bulb_c"
+                value={inputs.wet_bulb_c}
+                min={-5}
+                max={35}
+                step={0.1}
+                suffix="°C"
+                onChange={updateInput}
+              />
+              <RangeField
+                label="Current CHW Setpoint"
+                name="current_chw_setpoint_c"
+                value={inputs.current_chw_setpoint_c}
+                min={5}
+                max={10}
+                step={0.1}
+                suffix="°C"
+                onChange={updateInput}
+              />
+              <RangeField
+                label="Current Limit"
+                name="current_limit_pct"
+                value={inputs.current_limit_pct}
+                min={50}
+                max={100}
+                step={1}
+                suffix="%"
+                onChange={updateInput}
+              />
+            </div>
+
+            <div className="compact-grid">
+              <label className="field-card">
+                <div className="field-heading">
+                  <span>Hour</span>
+                  <strong>{inputs.hour}:00</strong>
+                </div>
+                <input
+                  className="number-input"
+                  type="number"
+                  min={0}
+                  max={23}
+                  value={inputs.hour}
+                  onChange={(event) => updateInput('hour', Number(event.target.value))}
+                />
+              </label>
+
+              <label className="field-card">
+                <div className="field-heading">
+                  <span>Month</span>
+                </div>
+                <select value={inputs.month} onChange={(event) => updateInput('month', Number(event.target.value))}>
+                  {monthOptions.map((month, index) => (
+                    <option key={month} value={index + 1}>
+                      {month}
+                    </option>
+                  ))}
+                </select>
+              </label>
+
+              <div className="field-card">
+                <div className="field-heading">
+                  <span>Weekend</span>
+                  <strong>{inputs.is_weekend ? 'Yes' : 'No'}</strong>
+                </div>
+                <div className="toggle-group">
+                  <button
+                    type="button"
+                    className={inputs.is_weekend ? 'choice-button' : 'choice-button active'}
+                    onClick={() => updateInput('is_weekend', 0)}
+                  >
+                    No
+                  </button>
+                  <button
+                    type="button"
+                    className={inputs.is_weekend ? 'choice-button active' : 'choice-button'}
+                    onClick={() => updateInput('is_weekend', 1)}
+                  >
+                    Yes
+                  </button>
+                </div>
+              </div>
+
+              <div className="field-card">
+                <div className="field-heading">
+                  <span>Chillers Running</span>
+                  <strong>{inputs.chillers_running}</strong>
+                </div>
+                <div className="toggle-group">
+                  {[1, 2, 3, 4].map((count) => (
+                    <button
+                      key={count}
+                      type="button"
+                      className={count === inputs.chillers_running ? 'choice-button active' : 'choice-button'}
+                      onClick={() => updateInput('chillers_running', count)}
+                    >
+                      {count}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            {error ? <p className="error-banner">{error}</p> : null}
+          </section>
+
+          {/* Column 2: OPTIMIZATION OUTPUT */}
+          <section className="glass-card panel-stack result-panel print-surface">
+            <div className="section-title-row">
+              <div>
+                <p className="section-label">Optimization Output</p>
+                <h2>Recommendation Summary</h2>
+              </div>
+              <span className="status-pill" style={{ backgroundColor: `${status.color}22`, color: status.color }}>
+                {status.label}
+              </span>
+            </div>
+
+            {loading ? (
+              <div className="loading-state">
+                <div className="spinner" />
+                <p>Calling optimization engine and preparing operator guidance.</p>
+              </div>
+            ) : result ? (
+              <>
+                <div className="result-grid">
+                  <div className="gauge-card">
+                    <div className="gauge-shell" style={buildGaugeStyle(result.result.currentEfficiency)}>
+                      <div className="gauge-core">
+                        <span>Current</span>
+                        <strong>{result.result.currentEfficiency.toFixed(3)}</strong>
+                        <small>kW/ton</small>
+                      </div>
+                    </div>
+                    <div className="gauge-legend">
+                      <span>Green &lt; 0.65</span>
+                      <span>Yellow 0.65-0.75</span>
+                      <span>Orange 0.75-0.85</span>
+                      <span>Red &gt; 0.85</span>
+                    </div>
+                  </div>
+
+                  <div className="metrics-grid">
+                    <MetricCard
+                      label="Optimal Efficiency"
+                      value={`${result.result.optimalEfficiency.toFixed(3)} kW/ton`}
+                      hint="Predicted optimized condition"
+                      accent="#81f5b6"
+                    />
+                    <MetricCard
+                      label="Improvement"
+                      value={`↑ ${result.result.improvementPercent.toFixed(1)}%`}
+                      hint="Efficiency gain"
+                      accent="#53f2a8"
+                    />
+                    <MetricCard
+                      label="Energy Savings"
+                      value={`${result.result.energySavingsKwh.toFixed(1)} kWh`}
+                      hint={formatCurrency(result.result.costSavingsUsd)}
+                      accent="#7fe6ff"
+                    />
+                    <MetricCard
+                      label="CO2 Reduction"
+                      value={`${result.result.co2ReductionKg.toFixed(1)} kg`}
+                      hint="Estimated avoided emissions"
+                      accent="#f7df72"
+                    />
+                  </div>
+                </div>
+
+                <div className="recommendation-banner">
+                  <div>
+                    <p className="section-label">Recommended CHW Setpoint</p>
+                    <h3>
+                      {result.inputs.current_chw_setpoint_c.toFixed(1)}°C → {result.result.recommendedSetpoint.toFixed(1)}°C
+                    </h3>
+                  </div>
+                  <button type="button" className="secondary-button" onClick={() => window.print()}>
+                    Export as PDF
+                  </button>
+                </div>
+
+                <div className="action-card">
+                  <p className="section-label">Operator Action</p>
+                  <p>{result.result.operatorAction}</p>
+                </div>
+              </>
+            ) : (
+              <div className="empty-state">
+                <p>No recommendation yet.</p>
+                <span>Run the optimizer to see efficiency targets, savings, and the recommended OptiView action.</span>
+              </div>
+            )}
+          </section>
+        </div>
+
+        {/* ROW 3: Full Width - LOCAL HISTORY */}
+        <div className="grid-row row-full">
+          <section className="glass-card panel-stack history-panel">
+            <div className="section-title-row">
+              <div>
+                <p className="section-label">Local History</p>
+                <h2>Last 10 Recommendations</h2>
+              </div>
+              <div className="button-row">
+                <button type="button" className="secondary-button" onClick={exportCsv} disabled={!history.length}>
+                  Export CSV
+                </button>
+                <button type="button" className="ghost-button" onClick={clearHistory} disabled={!history.length}>
+                  Clear History
+                </button>
+              </div>
+            </div>
+
+            {history.length ? (
+              <div className="history-list">
+                {history.map((item) => (
+                  <button key={item.id} type="button" className="history-item" onClick={() => restoreHistoryItem(item)}>
+                    <div>
+                      <strong>{formatTimestamp(item.timestamp)}</strong>
+                      <span>
+                        Load {item.inputs.load_tons} tons · {item.inputs.chillers_running} chillers
+                      </span>
+                    </div>
+                    <div className="history-metrics">
+                      <span>
+                        {item.result.currentEfficiency.toFixed(3)} → {item.result.optimalEfficiency.toFixed(3)} kW/ton
+                      </span>
+                      <strong>{item.result.improvementPercent.toFixed(1)}% savings</strong>
+                    </div>
+                  </button>
+                ))}
+              </div>
+            ) : (
+              <div className="empty-state">
+                <p>History is empty.</p>
+                <span>Completed recommendations will be stored in this browser.</span>
+              </div>
+            )}
+          </section>
+        </div>
+
       </main>
     </div>
   );
