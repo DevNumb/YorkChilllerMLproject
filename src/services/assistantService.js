@@ -1,22 +1,7 @@
-/**
- * AI Assistant Service - Frontend API Client
- * Calls the serverless function at /api/assistant
- * Works in both development and production
- */
+import { ASSISTANT_API_URL, ASSISTANT_DEFAULT_MODEL } from './assistantConfig.js';
 
-// Use relative API path - works on localhost (via Vercel dev) and production
-const API_PATH = '/api/assistant';
-
-/**
- * Send a question to the AI Assistant
- * @param {Object} params - Parameters object
- * @param {string} params.question - The question to ask the assistant
- * @param {Object} params.context - Optional context data (recommendations, conditions, etc.)
- * @returns {Promise<string>} The assistant's reply
- * @throws {Error} If the request fails
- */
-export async function sendAssistantMessage({ question, context }) {
-  const response = await fetch(API_PATH, {
+export async function sendAssistantMessage({ question, context, conversation, settings }) {
+  const response = await fetch(settings?.apiUrl || ASSISTANT_API_URL, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -24,30 +9,21 @@ export async function sendAssistantMessage({ question, context }) {
     body: JSON.stringify({
       question,
       context: context || {},
+      conversation: conversation || [],
+      model: settings?.model || ASSISTANT_DEFAULT_MODEL,
     }),
   });
 
+  const data = await response.json().catch(() => ({}));
+
   if (!response.ok) {
-    let errorMessage = `Request failed with status ${response.status}`;
-    
-    try {
-      const errorData = await response.json();
-      errorMessage = errorData.error || errorMessage;
-    } catch {
-      // If we can't parse JSON, use the status text
-      errorMessage = response.statusText || errorMessage;
-    }
-    
-    throw new Error(errorMessage);
+    throw new Error(data.error || `Assistant request failed with status ${response.status}`);
   }
 
-  const data = await response.json();
-  
-  if (data.error) {
-    throw new Error(data.error);
-  }
-
-  return data.reply || 'No assistant reply was returned.';
+  return {
+    reply: data.reply || 'No assistant reply was returned.',
+    chart: data.chart || null,
+    suggestedTitle: data.suggestedTitle || '',
+    model: data.model || settings?.model || ASSISTANT_DEFAULT_MODEL,
+  };
 }
-
-export default { sendAssistantMessage };

@@ -1,0 +1,25 @@
+.chat-page {
+  padding: 24px;
+  max-width: 900px;
+  margin: 0 auto;
+}
+
+.chat-page-header {
+  margin-bottom: 24px;
+}
+
+.chat-page-header h1 {
+  margin: 0 0 8px;
+  font-size: 28px;
+  font-weight: 700;
+  color: var(--accent);
+}
+
+.chat-page-header p {
+  margin: 0;
+  color: var(--muted);
+}
+
+.chat-page-content {
+  min-height: 500px;
+}

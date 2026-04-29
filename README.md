@@ -12,6 +12,7 @@ A production-oriented React dashboard for AI-powered chiller optimization.
 - Local history with restore and clear actions
 - CSV history export and print-to-PDF export
 - Responsive industrial dark UI
+- Messenger-style AI assistant with chat, charts, settings, and IndexedDB history
 
 ## API
 
@@ -23,6 +24,8 @@ You can override endpoints with:
 
 - `VITE_OPTIMIZER_URL`
 - `VITE_WEATHER_URL`
+- `VITE_ASSISTANT_API_URL`
+- `VITE_ASSISTANT_MODEL`
 
 ## Run
 
@@ -33,26 +36,26 @@ npm run dev
 
 ## AI Assistant
 
-The assistant UI is isolated under `src/features/assistant/`.
+Frontend assistant files live under `src/components/` and `src/services/`.
 
-Set frontend env values in a local `.env` file:
-
-```bash
-VITE_ASSISTANT_API_URL=http://localhost:8787/api/assistant
-```
-
-Set backend proxy env values before starting the proxy:
+Use a local `.env`:
 
 ```bash
-OPENAI_API_KEY=put-your-api-key-here
-OPENAI_MODEL=gpt-4o-mini
+VITE_ASSISTANT_API_URL=/api/assistant
+VITE_ASSISTANT_MODEL=openrouter/free
+VITE_ASSISTANT_APP_URL=https://your-vercel-app.vercel.app
 ```
 
-Run the proxy:
+Set these in Vercel:
 
 ```bash
-npm run assistant:proxy
+OPENROUTER_API_KEY=put-your-api-key-here
+OPENROUTER_MODEL=openrouter/free
+OPENROUTER_APP_URL=https://your-vercel-app.vercel.app
+OPENROUTER_APP_NAME=Chiller Energy Optimizer
 ```
+
+The Vercel serverless route is [api/assistant.js](C:/Users/nahdi/Documents/Codex/2026-04-26-i-need-you-to-create-a/api/assistant.js:1).
 
 ## Build
 

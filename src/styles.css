@@ -45,9 +45,23 @@ button {
   min-height: 100vh;
 }
 
-.app-shell {
+.app-container {
+  display: flex;
+  min-height: 100vh;
+}
+
+.main-content {
+  flex: 1;
+  margin-left: 220px;
+  min-height: 100vh;
+}
+
+.dashboard-page {
   position: relative;
   min-height: 100vh;
+  padding: 28px;
+  overflow: hidden;
+}
   padding: 28px;
   overflow: hidden;
 }

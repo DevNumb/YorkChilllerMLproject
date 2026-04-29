@@ -1,50 +1,58 @@
-/**
- * Assistant Context Builder
- * Creates context object for the AI Assistant based on current application state
- */
+function normalizeWeather(weather) {
+  if (!weather) {
+    return null;
+  }
 
-/**
- * Build context object for the AI Assistant
- * @param {Object} params - Parameters object
- * @param {Object} params.lastRecommendation - The latest recommendation from optimizer
- * @param {Object} params.liveConditions - Current weather and conditions
- * @param {Array} params.history - Historical data for context
- * @param {Object} params.location - Current location settings
- * @returns {Object} Context object for the assistant
- */
-export function buildAssistantContext({ lastRecommendation, liveConditions, history, location }) {
-  const context = {};
-  
-  // Add recommendation context
-  if (lastRecommendation) {
-    context.recommendation = {
-      type: lastRecommendation.type,
-      priority: lastRecommendation.priority,
-      description: lastRecommendation.description,
-      potentialSavings: lastRecommendation.potentialSavings,
-      timestamp: lastRecommendation.timestamp
-    };
-  }
-  
-  // Add live conditions context
-  if (liveConditions) {
-    context.conditions = {
-      outdoorTemp: liveConditions.temperature,
-      humidity: liveConditions.humidity,
-      load: liveConditions.load,
-      efficiency: liveConditions.efficiency
-    };
-  }
-  
-  // Add location context
-  if (location) {
-    context.location = {
-      city: location.city,
-      timezone: location.timezone
-    };
-  }
-  
-  return context;
+  return {
+    location: weather.location || 'Unknown site',
+    source: weather.source || 'manual',
+    outdoorTemperatureC: weather.temperature ?? null,
+    humidityPct: weather.humidity ?? null,
+    wetBulbC: weather.wetBulb ?? null,
+    weatherError: weather.error || '',
+  };
 }
 
-export default { buildAssistantContext };
+function normalizeInputs(inputs) {
+  if (!inputs) {
+    return null;
+  }
+
+  return {
+    coolingLoadTons: inputs.load_tons ?? null,
+    wetBulbC: inputs.wet_bulb_c ?? null,
+    currentChwSetpointC: inputs.current_chw_setpoint_c ?? null,
+    currentLimitPct: inputs.current_limit_pct ?? null,
+    hour: inputs.hour ?? null,
+    month: inputs.month ?? null,
+    isWeekend: inputs.is_weekend === undefined ? null : Boolean(inputs.is_weekend),
+    chillersRunning: inputs.chillers_running ?? null,
+  };
+}
+
+function normalizeRecommendation(result) {
+  if (!result?.result) {
+    return null;
+  }
+
+  return {
+    timestamp: result.timestamp || null,
+    currentEfficiencyKwPerTon: result.result.currentEfficiency ?? null,
+    optimalEfficiencyKwPerTon: result.result.optimalEfficiency ?? null,
+    improvementPercent: result.result.improvementPercent ?? null,
+    energySavingsKwh: result.result.energySavingsKwh ?? null,
+    costSavingsUsd: result.result.costSavingsUsd ?? null,
+    co2ReductionKg: result.result.co2ReductionKg ?? null,
+    recommendedSetpointC: result.result.recommendedSetpoint ?? null,
+    operatorAction: result.result.operatorAction || '',
+  };
+}
+
+export function buildAssistantContext({ weather, inputs, result }) {
+  return {
+    liveConditions: normalizeWeather(weather),
+    optimizationInputs: normalizeInputs(inputs),
+    lastRecommendation: normalizeRecommendation(result),
+    capturedAt: new Date().toISOString(),
+  };
+}

@@ -1,21 +1,49 @@
-import { Routes, Route } from 'react-router-dom';
-import Sidebar from './components/Sidebar';
-import Dashboard from './pages/Dashboard';
-import ChatPage from './pages/ChatPage';
+import { useEffect, useMemo, useState } from 'react';
+import { buildAssistantContext } from '../services/assistantContext';
 
-export default function App() {
-  return (
-    <div className="app-container">
-      <Sidebar />
-      <main className="main-content">
-        <Routes>
-          <Route path="/" element={<Dashboard />} />
-          <Route path="/chat" element={<ChatPage />} />
-        </Routes>
-      </main>
-    </div>
-  );
-}
+const OPTIMIZER_URL =
+  import.meta.env.VITE_OPTIMIZER_URL || 'https://DevNumb-MLYorkchillerOptimzer.hf.space';
+const WEATHER_URL = import.meta.env.VITE_WEATHER_URL || 'https://api.open-meteo.com/v1/forecast';
+const HISTORY_KEY = 'chiller-optimizer-history-v1';
+
+const defaultLocation = {
+  latitude: 36.8065,
+  longitude: 10.1815,
+  label: 'Tunis fallback',
+};
+
+const monthOptions = [
+  'January',
+  'February',
+  'March',
+  'April',
+  'May',
+  'June',
+  'July',
+  'August',
+  'September',
+  'October',
+  'November',
+  'December',
+];
+
+const scenarioPresets = [
+  {
+    label: 'Summer Peak',
+    icon: '🏭',
+    values: {
+      load_tons: 1800,
+      wet_bulb_c: 26,
+      current_chw_setpoint_c: 6,
+      current_limit_pct: 100,
+      hour: 14,
+      month: 7,
+      is_weekend: 0,
+      chillers_running: 4,
+    },
+  },
+  {
+    label: 'Winter Night',
     icon: '❄️',
     values: {
       load_tons: 400,
@@ -340,7 +368,7 @@ function RangeField({ label, name, value, min, max, step, suffix, onChange }) {
   );
 }
 
-function App() {
+export default function Dashboard() {
   const [clock, setClock] = useState(() => new Date());
   const [inputs, setInputs] = useState(initialInputs);
   const [weather, setWeather] = useState({
@@ -603,7 +631,7 @@ function App() {
   }
 
   return (
-    <div className="app-shell">
+    <div className="dashboard-page">
       <div className="background-grid" />
       <header className="hero-card glass-card">
         <div>
@@ -958,11 +986,7 @@ function App() {
             </div>
           )}
         </section>
-
-        <AIChatAssistant context={assistantContext} />
       </main>
     </div>
   );
 }
-
-export default App;
