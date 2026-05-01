@@ -80,7 +80,7 @@ function MessageBubble({ message }) {
   );
 }
 
-export default function AIChatAssistant({ context = {} }) {
+export default function AIChatAssistant({ context = {}, onEnhancedSend }) {
   const [threads, setThreads] = useState([]);
   const [activeThreadId, setActiveThreadId] = useState('');
   const [activeSection, setActiveSection] = useState('chat');
@@ -174,15 +174,28 @@ export default function AIChatAssistant({ context = {} }) {
     setLoading(true);
 
     try {
-      const response = await sendAssistantMessage({
-        question,
-        context,
-        settings,
-        conversation: workingThread.messages.map((message) => ({
-          role: message.role,
-          content: message.content,
-        })),
-      });
+      let response;
+      if (onEnhancedSend) {
+        response = await onEnhancedSend({
+          question,
+          context,
+          settings,
+          conversation: workingThread.messages.map((message) => ({
+            role: message.role,
+            content: message.content,
+          })),
+        });
+      } else {
+        response = await sendAssistantMessage({
+          question,
+          context,
+          settings,
+          conversation: workingThread.messages.map((message) => ({
+            role: message.role,
+            content: message.content,
+          })),
+        });
+      }
 
       const chart = normalizeChartSpec(response.chart);
       const assistantMessage = createAssistantMessage(response.reply, response.model);

@@ -1,0 +1,314 @@
+# DASHBOARD FIX PLAN - THREE CRITICAL ISSUES
+# PROJECT: Chiller Plant Dashboard with pages: Dashboard (DO NOT TOUCH), AI Assistant, Energy Forecast, Maintenance
+
+================================================================================
+GLOBAL RULES - READ FIRST
+================================================================================
+
+✓ DO NOT modify Dashboard page - NOT A SINGLE LINE OF CODE
+✓ DO NOT break existing functionality on any page
+✓ ONLY add new features - never remove existing ones
+✓ Test each change before moving to next
+✓ If a change requires modifying Dashboard → STOP immediately
+
+================================================================================
+ISSUE 1: ENERGY FORECAST PAGE - HARDCODED API URL
+================================================================================
+
+LOCATION: src/pages/EnergyForecast.tsx (or similar name)
+
+PROBLEM:
+API URL is hardcoded to "https://DevNumb-MLYorkchillerOptimzer.hf.space" instead of using environment variable
+
+WHAT TO CHANGE:
+1. Find where the fetch/axios call happens in Energy Forecast page
+2. Replace hardcoded URL with environment variable
+3. Use fallback to existing URL if env var not set
+
+REQUIREMENT:
+- Read from: import.meta.env.VITE_OPTIMIZER_URL
+- Fallback to: 'https://DevNumb-MLYorkchillerOptimzer.hf.space'
+- Keep all other code identical
+
+WHAT NOT TO CHANGE:
+- Do not change chart display
+- Do not change data processing
+- Do not change UI layout
+
+================================================================================
+ISSUE 2: MAINTENANCE PAGE - PROFESSIONAL TRACKING SYSTEM
+================================================================================
+
+LOCATION: src/pages/Maintenance.tsx
+
+CURRENT STATE:
+- Basic checklist of tasks
+- No history tracking
+- No database persistence
+- No yearly overview
+
+WHAT TO ADD (KEEP EVERYTHING EXISTING):
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+PART A: DATABASE SETUP
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+CREATE NEW FILE: src/services/maintenanceDatabase.ts
+
+Build IndexedDB with these tables:
+
+TABLE: tasks
+- id (string, primary key)
+- name (string) - e.g., "Clean condenser coils"
+- category (string) - "cleaning", "refrigerant", "filters", "calibration", "inspection"
+- frequencyDays (number) - days between maintenance
+- lastCompleted (ISO date or null)
+- nextDue (ISO date or null)
+- status (string) - "pending", "completed", "overdue", "skipped"
+- assignedTo (string) - technician name
+- notes (string)
+- priority (string) - "high", "medium", "low"
+- estimatedMinutes (number)
+
+TABLE: history
+- id (string, primary key)
+- taskId (string, foreign key to tasks.id)
+- completedDate (ISO date)
+- completedBy (string)
+- durationMinutes (number)
+- notes (string)
+- partsReplaced (string)
+- cost (number)
+- attachments (array of strings) - file names or URLs
+
+TABLE: yearlyStats
+- id (string, primary key)
+- year (number)
+- month (number)
+- taskId (string)
+- completedCount (number)
+- totalDurationMinutes (number)
+- averageCompletionDays (number)
+
+Export functions:
+- getAllTasks() - returns all tasks
+- getTaskById(id) - returns single task
+- completeTask(taskId, completionData) - marks task complete, updates history
+- getHistory(taskId, limit) - returns history entries
+- getYearlyStats(year) - returns stats for a year
+- addNewTask(task) - adds custom task
+- updateTask(task) - updates task details
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+PART B: MODIFY MAINTENANCE PAGE
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+KEEP EXISTING:
+- All current checklist items must remain visible
+- Existing check/uncheck functionality stays
+- Current layout structure preserved
+
+ADD AT THE TOP OF PAGE (above existing checklist):
+
+1. PROFESSIONAL HEADER SECTION:
+   - Title: "Maintenance Management System"
+   - Stats cards showing:
+     • Overdue tasks count (red)
+     • Tasks due this week (yellow)
+     • Completed this month (green)
+     • Overall completion rate (blue)
+   - Quick actions: "Log Maintenance", "View Yearly Report", "Export History"
+
+2. FILTER AND SEARCH BAR:
+   - Search by task name
+   - Filter by status (All / Pending / Overdue / Completed)
+   - Filter by category dropdown
+   - Sort by due date / priority / name
+
+ADD BELOW EXISTING CHECKLIST:
+
+3. ENHANCED TASK DISPLAY (upgrade the checklist items):
+   For each task, display:
+   - Task name
+   - Status badge (🔴 Overdue / 🟡 Due Soon / 🟢 Completed / ⚪ Pending)
+   - Priority badge (HIGH / MEDIUM / LOW)
+   - Due date (formatted nicely)
+   - Last completed date
+   - "Complete" button (opens modal)
+   - "History" button (shows past completions)
+   - Progress indicator (if recurring)
+
+4. COMPLETION MODAL (when clicking Complete):
+   - Modal title: "Log Maintenance Completion"
+   - Fields:
+     • Task name (pre-filled, read-only)
+     • Completed date (date picker, defaults to today)
+     • Completed by (text input)
+     • Duration (number input, minutes)
+     • Notes (textarea)
+     • Parts replaced (textarea)
+     • Cost (number input)
+     • Attachments (file upload - optional)
+   - Buttons: "Save & Complete", "Cancel"
+
+5. HISTORY LOG SECTION:
+   - Expandable/collapsible section
+   - Shows last 10 completions for selected task
+   - Columns: Date, Completed By, Duration, Notes
+   - "View All" link to see full history
+
+6. YEARLY TRACKING SECTION:
+   - Calendar/heatmap view showing completion days
+   - Bar chart showing completions per month
+   - Dropdown to select year (2024, 2025, 2026)
+   - Summary stats for selected year:
+     • Total tasks completed
+     • Average completion time
+     • Most frequent task category
+     • Cost summary
+
+7. EXPORT FUNCTIONALITY:
+   - Export history to CSV
+   - Export yearly report to PDF (or CSV)
+   - Print maintenance schedule
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+PART C: CREATE NEW COMPONENTS
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+CREATE THESE NEW FILES:
+
+src/components/maintenance/MaintenanceStats.tsx
+- Shows stats cards at top of page
+
+src/components/maintenance/MaintenanceFilters.tsx
+- Search and filter controls
+
+src/components/maintenance/TaskItem.tsx
+- Individual task display with all badges and buttons
+
+src/components/maintenance/CompleteTaskModal.tsx
+- Modal form for logging completion
+
+src/components/maintenance/TaskHistory.tsx
+- History log view
+
+src/components/maintenance/YearlyTracker.tsx
+- Yearly calendar/stats view
+
+src/components/maintenance/ExportButton.tsx
+- Export functionality
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+PART D: INITIAL DATA
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Pre-populate database with these tasks:
+
+1. Clean condenser coils
+   - Category: cleaning
+   - Frequency: 30 days
+   - Priority: high
+
+2. Check refrigerant levels
+   - Category: refrigerant
+   - Frequency: 90 days
+   - Priority: high
+
+3. Inspect and replace filters
+   - Category: filters
+   - Frequency: 45 days
+   - Priority: medium
+
+4. Calibrate sensors
+   - Category: calibration
+   - Frequency: 180 days
+   - Priority: medium
+
+5. Inspect electrical connections
+   - Category: inspection
+   - Frequency: 60 days
+   - Priority: high
+
+6. Lubricate moving parts
+   - Category: cleaning
+   - Frequency: 90 days
+   - Priority: medium
+
+7. Test safety controls
+   - Category: inspection
+   - Frequency: 30 days
+   - Priority: high
+
+8. Check belt tension
+   - Category: inspection
+   - Frequency: 60 days
+   - Priority: medium
+
+For each task, calculate nextDue based on lastCompleted (or set to today + frequencyDays if no history)
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+PART E: PROFESSIONAL STYLING REQUIREMENTS
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+- Clean, industrial dashboard look
+- Use Tailwind CSS or existing design system
+- Status colors:
+  • Overdue: red (#ef4444)
+  • Due soon (within 3 days): yellow (#eab308)
+  • Pending: blue (#3b82f6)
+  • Completed: green (#22c55e)
+- Cards have subtle shadows and borders
+- Responsive layout (works on tablet and desktop)
+- Loading states for database operations
+- Toast notifications for save/complete actions
+
+================================================================================
+ISSUE 3: AI ASSISTANT PAGE - CONTEXT AWARENESS
+================================================================================
+
+LOCATION: src/pages/AIAssistant.tsx
+
+PROBLEM:
+AI Assistant cannot see any dashboard/plant data and gives generic answers
+
+WHAT TO ADD (KEEP EXISTING CHAT FUNCTIONALITY):
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+PART A: DIRECT DATA FETCHING
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Add functions to fetch live data directly from APIs (DO NOT depend on Dashboard page):
+
+Function 1: fetchPlantData()
+- Use VITE_OPTIMIZER_URL from environment
+- Fetch current efficiency
+- Fetch optimal efficiency target
+- Fetch current setpoint
+- Fetch outdoor temperature
+- Fetch 24h forecast
+- Fetch current energy usage
+- Fetch peak prediction
+
+Function 2: fetchMaintenanceData()
+- Read from maintenanceDatabase (IndexedDB)
+- Get overdue tasks count
+- Get pending tasks count
+- Get completed tasks for current month
+- Get upcoming tasks (next 7 days)
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+PART B: MODIFY CHAT FLOW
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+When user sends a message:
+
+1. Display loading indicator
+2. Fetch fresh plant data (call both functions above)
+3. Build context prompt with the fetched data
+4. Prepend context to user's message
+5. Send to AI API (OpenAI/Claude/etc.)
+6. Display response
+7. Cache data for 30 seconds (don't refetch if recent)
+
+Context prompt format:
