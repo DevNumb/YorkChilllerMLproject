@@ -1,99 +1,31 @@
-## MISSION: Fix Energy Forecasting Page for Tomorrow Forecasting
+# PLAN: Fix Energy Forecasting Page for Tomorrow
 
-### STEP 1 - ANALYZE DASHBOARD PAGE
-Read the Dashboard page completely. Find out:
+## STEP 1: FIX ENERGY FORECAST PAGE
+Modify src/pages/EnergyForecast.tsx
 
-- What API calls does it make to get forecast data?
-- What date parameters does it send to get "tomorrow" predictions?
-- What does the response data look like (energy, load, temperature, setpoints)?
-- How does it process and display the forecast?
+Make it:
+- Use the SAME API call pattern as Dashboard
+- Request tomorrow's 24-hour data
+- Display: energy (kWh), load (tons), temperature (°C)
+- Show peak times and values
+- Add refresh button
 
-Document everything you find about the working Dashboard implementation.
+## STEP 2: ADD DATA ANALYSIS
+Add to Energy Forecast page:
+- Peak energy (time + value)
+- Total energy for tomorrow
+- Efficiency analysis (best/worst hours)
+- Setpoint recommendations
 
-### STEP 2 - READ CURRENT ENERGY FORECAST PAGE
-Read the Energy Forecast page. Identify:
-
-- Is it broken? What exactly is wrong?
-- Does it request tomorrow's data correctly?
-- Does it match how Dashboard requests forecasts?
-- What data does it show vs what it should show?
-
-### STEP 3 - FIX THE ENERGY FORECAST PAGE
-
-Make the Energy Forecast page work properly for tomorrow's forecast:
-
-A. Fix API Calls
-   - Use the same API endpoint pattern as Dashboard
-   - Send the correct date range for "tomorrow" (next 24 hours)
-   - Include all parameters that Dashboard includes
-
-B. Fix Data Display
-   - Show 24-hour forecast (hour by hour)
-   - Display energy predictions (kWh)
-   - Display load predictions (tons)
-   - Display temperature forecast
-   - Display optimal setpoint recommendations
-
-C. Add Analysis Features
-   - Show peak energy time and value
-   - Show total energy consumption for tomorrow
-   - Compare efficiency across different hours
-   - Identify optimal operating periods
-
-D. Fix Visualizations
-   - Create chart showing energy + load + temperature overlay
-   - Add interactive tooltips with detailed data
-   - Highlight peak periods
-
-E. Add Professional UI Elements
-   - Stats cards for key metrics
-   - Last updated timestamp
-   - Refresh button
-   - Export to CSV option
-
-### STEP 4 - VERIFY CORRECTNESS
-
-After fixing:
-- Compare Energy Forecast page data with Dashboard page data
-- They should show matching predictions for tomorrow
-- If different, debug and align the logic
-
-### STEP 5 - ADD ERROR HANDLING
-
-Handle these scenarios:
-- API fails to respond
-- No data for tomorrow
-- Missing weather information
-- Network errors
-
-Show user-friendly messages for each.
-
-### CRITICAL RULES
-
-- DO NOT modify Dashboard page - read only for reference
-- DO NOT break any existing functionality on other component of the project only energy forcasting page 
-- Use the exact same API patterns as Dashboard
-- Ensure tomorrow's date is displayed (not today)
-- Test everything before considering complete
-
-### FILES TO EXAMINE
-
-Read these files (DO NOT modify unless necessary):
-- src/pages/Dashboard.tsx - to understand working patterns
-- src/pages/EnergyForecast.tsx - to fix
-
-### TESTING CHECKLIST
-
-Confirm these work:
-- Tomorrow's date shows correctly
-- 24 hours of forecast data displays
-- Peak energy time is identified
-- Chart renders properly
+## STEP 3: VERIFY
 - Data matches Dashboard predictions
-- Refresh button works
-- Error messages show when needed
-- Page looks professional
+- Tomorrow's date shows correctly
+- No changes to Dashboard or other pages
 
-### START
+## RULES
+- ONLY modify Energy Forecast page
+- DO NOT touch Dashboard
+- DO NOT touch other pages
 
-Begin by reading Dashboard page completely. Document the exact API calls and parameters used for tomorrow's forecast. Then read Energy Forecast page. Then fix.
+## START
+Read Dashboard page now.
