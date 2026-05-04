@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { buildAssistantContext } from '../services/assistantContext';
+import { buildDashboardPredictionInput, calculateSavings } from '../services/chillerOptimizer';
 
 const OPTIMIZER_URL =
   import.meta.env.VITE_OPTIMIZER_URL || 'https://DevNumb-MLYorkchillerOptimzer.hf.space';
@@ -182,16 +183,33 @@ function flattenEntries(value, parentKey = '', entries = []) {
 }
 
 function findNumericField(source, patterns) {
+  const extractNumericValue = (value) => {
+    if (typeof value === 'number') {
+      return Number.isFinite(value) ? value : null;
+    }
+
+    if (typeof value === 'string') {
+      const direct = Number(value);
+      if (!Number.isNaN(direct)) {
+        return direct;
+      }
+
+      const matched = value.match(/-?\d+(\.\d+)?/);
+      if (matched) {
+        const parsed = Number(matched[0]);
+        return Number.isNaN(parsed) ? null : parsed;
+      }
+    }
+
+    return null;
+  };
+
   const entries = flattenEntries(source);
   const normalizedPatterns = patterns.map((pattern) => pattern.toLowerCase());
 
   for (const [key, value] of entries) {
-    if (typeof value !== 'number' && typeof value !== 'string') {
-      continue;
-    }
-
-    const numericValue = Number(value);
-    if (Number.isNaN(numericValue)) {
+    const numericValue = extractNumericValue(value);
+    if (numericValue === null) {
       continue;
     }
 
@@ -252,7 +270,13 @@ function deriveResultMetrics(payload, response) {
     ]) ?? round(clamp(payload.current_chw_setpoint_c + 1.0, 5, 10), 1);
 
   const improvementPercent =
-    findNumericField(response, ['improvement_pct', 'efficiency_improvement', 'savings_pct']) ??
+    findNumericField(response, [
+      'improvement_pct',
+      'efficiency_improvement',
+      'efficiency_improvement_pct',
+      'potential_savings',
+      'savings_pct',
+    ]) ??
     round(((currentEfficiency - optimalEfficiency) / currentEfficiency) * 100, 1);
 
   const energySavingsKwh =
@@ -399,6 +423,17 @@ export default function Dashboard() {
   const [history, setHistory] = useState(readHistory);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [chillerOptimization, setChillerOptimization] = useState(null);
+  const [optimizationLoading, setOptimizationLoading] = useState(false);
+  const [optimizationHistory, setOptimizationHistory] = useState(() => {
+    if (typeof window === 'undefined') return [];
+    try {
+      const raw = window.localStorage.getItem('chiller-optimization-history-v1');
+      return raw ? JSON.parse(raw) : [];
+    } catch {
+      return [];
+    }
+  });
 
   useEffect(() => {
     const timer = window.setInterval(() => setClock(new Date()), 1000);
@@ -408,6 +443,12 @@ export default function Dashboard() {
   useEffect(() => {
     window.localStorage.setItem(HISTORY_KEY, JSON.stringify(history.slice(0, 10)));
   }, [history]);
+
+  useEffect(() => {
+    if (typeof window !== 'undefined' && window?.localStorage && optimizationHistory.length > 0) {
+      window.localStorage.setItem('chiller-optimization-history-v1', JSON.stringify(optimizationHistory.slice(0, 20)));
+    }
+  }, [optimizationHistory]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -575,10 +616,7 @@ export default function Dashboard() {
     setError('');
 
     try {
-      const payload = {
-        ...inputs,
-        is_weekend: Number(inputs.is_weekend),
-      };
+      const payload = buildDashboardPredictionInput(inputs);
 
       const candidates = buildOptimizerCandidates(OPTIMIZER_URL);
       let response = null;
@@ -610,22 +648,56 @@ export default function Dashboard() {
       }
 
       const data = await response.json();
-      const metrics = deriveResultMetrics(payload, data);
+      const metrics = deriveResultMetrics(inputs, data);
       const entry = {
         id: crypto.randomUUID(),
         timestamp: new Date().toISOString(),
-        inputs: payload,
+        inputs: { ...inputs },
+        apiPayload: payload,
         result: metrics,
       };
 
       setResult(entry);
       setHistory((current) => [entry, ...current].slice(0, 10));
+
+      await runChillerOptimization(inputs);
     } catch (requestError) {
       setError(
         'The optimization service could not be reached at /optimize or /predict. Check the Space URL, endpoint path, and CORS settings.',
       );
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function runChillerOptimization(payload) {
+    setOptimizationLoading(true);
+    try {
+      const savings = await calculateSavings(
+        payload.load_tons,
+        payload.wet_bulb_c,
+        payload.hour,
+        payload.month,
+        payload.is_weekend,
+        payload.current_limit_pct,
+        [payload.chillers_running],
+        payload.current_chw_setpoint_c
+      );
+
+      if (savings) {
+        setChillerOptimization(savings);
+        const historyEntry = {
+          id: crypto.randomUUID(),
+          timestamp: new Date().toISOString(),
+          conditions: payload,
+          result: savings,
+        };
+        setOptimizationHistory((current) => [historyEntry, ...current].slice(0, 20));
+      }
+    } catch (err) {
+      console.warn('Chiller optimization failed:', err);
+    } finally {
+      setOptimizationLoading(false);
     }
   }
 
@@ -1076,6 +1148,123 @@ function SystemStatusCard({ chillersRunning, efficiency, faultCount }) {
             )}
           </section>
         </div>
+
+        {/* ROW 2.5: CHILLER STAGING OPTIMIZATION */}
+        {chillerOptimization && (
+          <div className="grid-row row-2-cols">
+            <section className="glass-card panel-stack">
+              <div className="section-title-row">
+                <div>
+                  <p className="section-label">Current Configuration</p>
+                  <h2>Active Chillers</h2>
+                </div>
+              </div>
+              <div className="weather-grid">
+                <MetricCard
+                  label="Chillers Running"
+                  value={`${chillerOptimization.currentConfig.chillers.join(', ')}`}
+                  hint="Current active units"
+                  accent="#7fe6ff"
+                />
+                <MetricCard
+                  label="Current Setpoint"
+                  value={`${chillerOptimization.currentConfig.setpoint.toFixed(1)}°C`}
+                  hint="CHW temperature"
+                  accent="#f7df72"
+                />
+                <MetricCard
+                  label="Current kW/TR"
+                  value={`${chillerOptimization.currentConfig.kwPerTr.toFixed(3)}`}
+                  hint="Efficiency metric"
+                  accent="#ff9f5a"
+                />
+                <MetricCard
+                  label="Current Power"
+                  value={`${chillerOptimization.currentConfig.totalPower.toFixed(0)} kW`}
+                  hint="Total power draw"
+                  accent="#ff6b7d"
+                />
+              </div>
+            </section>
+
+            <section className="glass-card panel-stack">
+              <div className="section-title-row">
+                <div>
+                  <p className="section-label">Optimal Configuration</p>
+                  <h2>Recommended Staging</h2>
+                </div>
+                <span className="status-pill" style={{ backgroundColor: chillerOptimization.powerSaved > 0 ? '#53f2a822' : '#ff6b7d22', color: chillerOptimization.powerSaved > 0 ? '#53f2a8' : '#ff6b7d' }}>
+                  {chillerOptimization.powerSaved > 0 ? '✓ Savings' : '✗ No Savings'}
+                </span>
+              </div>
+              <div className="weather-grid">
+                <MetricCard
+                  label="Recommended Chillers"
+                  value={`${chillerOptimization.optimalConfig.chillers.join(', ')}`}
+                  hint="Optimal active units"
+                  accent="#53f2a8"
+                />
+                <MetricCard
+                  label="Recommended Setpoint"
+                  value={`${chillerOptimization.optimalConfig.setpoint.toFixed(1)}°C`}
+                  hint="Optimal CHW temperature"
+                  accent="#81f5b6"
+                />
+                <MetricCard
+                  label="Expected kW/TR"
+                  value={`${chillerOptimization.optimalConfig.kwPerTr.toFixed(3)}`}
+                  hint="Optimized efficiency"
+                  accent="#8ef5bf"
+                />
+                <MetricCard
+                  label="Expected Power"
+                  value={`${chillerOptimization.optimalConfig.totalPower.toFixed(0)} kW`}
+                  hint="Optimized power draw"
+                  accent="#4be4a4"
+                />
+              </div>
+            </section>
+          </div>
+        )}
+
+        {chillerOptimization && chillerOptimization.powerSaved > 0 && (
+          <div className="grid-row row-full">
+            <section className="glass-card panel-stack">
+              <div className="section-title-row">
+                <div>
+                  <p className="section-label">Chiller Staging Savings</p>
+                  <h2>Optimization Potential</h2>
+                </div>
+              </div>
+              <div className="weather-grid">
+                <MetricCard
+                  label="Power Saved"
+                  value={`${chillerOptimization.powerSaved.toFixed(1)} kW`}
+                  hint="Reduction in power draw"
+                  accent="#53f2a8"
+                />
+                <MetricCard
+                  label="Improvement"
+                  value={`${chillerOptimization.improvementPercent.toFixed(1)}%`}
+                  hint="Efficiency gain"
+                  accent="#81f5b6"
+                />
+                <MetricCard
+                  label="Cost Savings/Hour"
+                  value={`$${chillerOptimization.costSavingsPerHour.toFixed(2)}`}
+                  hint="Hourly cost reduction"
+                  accent="#7fe6ff"
+                />
+                <MetricCard
+                  label="CO2 Reduction/Hour"
+                  value={`${chillerOptimization.co2ReductionPerHour.toFixed(1)} kg`}
+                  hint="Avoided emissions"
+                  accent="#f7df72"
+                />
+              </div>
+            </section>
+          </div>
+        )}
 
         {/* ROW 3: Full Width - LOCAL HISTORY */}
         <div className="grid-row row-full">
