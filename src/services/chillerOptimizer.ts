@@ -62,14 +62,6 @@ function normalizeOptimizerBaseUrl(url: string): string {
   return url.replace(/\/+$/, '');
 }
 
-function buildOptimizerCandidates(url: string): string[] {
-  const normalized = normalizeOptimizerBaseUrl(url);
-  if (normalized.endsWith('/optimize') || normalized.endsWith('/predict')) {
-    return [normalized];
-  }
-  return [`${normalized}/predict`, `${normalized}/optimize`];
-}
-
 function findNumericField(source: any, patterns: string[]): number | null {
   const extractNumericValue = (value: any): number | null => {
     if (typeof value === 'number') {
@@ -236,9 +228,7 @@ function buildOrderedCandidates(path: 'predict' | 'optimize'): string[] {
     return [normalized];
   }
 
-  return path === 'optimize'
-    ? [`${normalized}/optimize`, `${normalized}/predict`]
-    : [`${normalized}/predict`, `${normalized}/optimize`];
+  return [path === 'optimize' ? `${normalized}/optimize` : `${normalized}/predict`];
 }
 
 async function fetchOptimizerResponse(inputs: PredictionInput, preferredPath: 'predict' | 'optimize' = 'predict'): Promise<any | null> {

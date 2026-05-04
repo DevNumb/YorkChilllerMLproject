@@ -3,9 +3,61 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { getAllChillerCombinations, getAllSetpoints, buildPredictionInput, predictKwPerTr, calculateSavings } from '../services/chillerOptimizer';
 
 const OPTIMIZER_URL = import.meta.env.VITE_OPTIMIZER_URL || 'https://DevNumb-MLYorkchillerOptimzer.hf.space';
+const FORECAST_CACHE_KEY = 'energy-forecasting-schedule-cache-v1';
+const MANUAL_OPTIMIZATION_CACHE_KEY = 'energy-forecasting-manual-cache-v1';
 
 function round(value, digits = 1) {
   return Number(value.toFixed(digits));
+}
+
+function readForecastCache() {
+  if (typeof window === 'undefined') {
+    return null;
+  }
+
+  try {
+    const raw = window.localStorage.getItem(FORECAST_CACHE_KEY);
+    return raw ? JSON.parse(raw) : null;
+  } catch {
+    return null;
+  }
+}
+
+function writeForecastCache(payload) {
+  if (typeof window === 'undefined') {
+    return;
+  }
+
+  try {
+    window.localStorage.setItem(FORECAST_CACHE_KEY, JSON.stringify(payload));
+  } catch {
+    // Ignore storage failures.
+  }
+}
+
+function readManualOptimizationCache() {
+  if (typeof window === 'undefined') {
+    return null;
+  }
+
+  try {
+    const raw = window.localStorage.getItem(MANUAL_OPTIMIZATION_CACHE_KEY);
+    return raw ? JSON.parse(raw) : null;
+  } catch {
+    return null;
+  }
+}
+
+function writeManualOptimizationCache(payload) {
+  if (typeof window === 'undefined') {
+    return;
+  }
+
+  try {
+    window.localStorage.setItem(MANUAL_OPTIMIZATION_CACHE_KEY, JSON.stringify(payload));
+  } catch {
+    // Ignore storage failures.
+  }
 }
 
 function MetricCard({ label, value, hint, accent }) {
@@ -52,9 +104,12 @@ function RangeField({ label, name, value, min, max, step, suffix, onChange }) {
 }
 
 export default function EnergyForecasting() {
-  const [tomorrowDate, setTomorrowDate] = useState('');
-  const [schedule24h, setSchedule24h] = useState([]);
-  const [dailySummary, setDailySummary] = useState(null);
+  const cachedForecast = readForecastCache();
+  const cachedManualOptimization = readManualOptimizationCache();
+
+  const [tomorrowDate, setTomorrowDate] = useState(() => cachedForecast?.tomorrowDate || '');
+  const [schedule24h, setSchedule24h] = useState(() => cachedForecast?.schedule24h || []);
+  const [dailySummary, setDailySummary] = useState(() => cachedForecast?.dailySummary || null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
@@ -66,7 +121,7 @@ export default function EnergyForecasting() {
     chillers_running: 2,
   });
 
-  const [manualOptimization, setManualOptimization] = useState(null);
+  const [manualOptimization, setManualOptimization] = useState(() => cachedManualOptimization?.result || null);
   const [manualLoading, setManualLoading] = useState(false);
 
   const generateTomorrow24hSchedule = useCallback(async () => {
@@ -127,21 +182,37 @@ export default function EnergyForecasting() {
       const mostUsedChiller = Object.entries(chillerUsage).sort((a, b) => b[1] - a[1])[0];
       const setpointRange = Object.keys(setpointUsage).map(Number).sort();
 
-      setDailySummary({
+      const nextSummary = {
         totalEnergy: round(totalEnergy, 0),
         avgKwPerTr: round(totalPower / 24 / 800, 3),
         mostUsedChillers: mostUsedChiller ? mostUsedChiller[0] : 'N/A',
         setpointMin: setpointRange[0] || 6.5,
         setpointMax: setpointRange[setpointRange.length - 1] || 6.5,
         peakHour: schedule.reduce((max, h) => h.totalPower > max.totalPower ? h : max, schedule[0]),
+      };
+
+      setDailySummary(nextSummary);
+      writeForecastCache({
+        tomorrowDate: tomorrow.toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' }),
+        schedule24h: schedule,
+        dailySummary: nextSummary,
+        cachedAt: new Date().toISOString(),
       });
     } catch (err) {
       console.warn('Schedule generation failed:', err);
-      setError('Failed to generate 24-hour schedule');
+      const fallback = readForecastCache();
+      if (fallback?.schedule24h?.length) {
+        setTomorrowDate(fallback.tomorrowDate || tomorrowDate);
+        setSchedule24h(fallback.schedule24h);
+        setDailySummary(fallback.dailySummary || null);
+        setError('Failed to refresh schedule. Showing the last successful forecast.');
+      } else {
+        setError('Failed to generate 24-hour schedule');
+      }
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [tomorrowDate]);
 
   const runManualOptimization = useCallback(async () => {
     setManualLoading(true);
@@ -160,9 +231,18 @@ export default function EnergyForecasting() {
 
       if (savings) {
         setManualOptimization(savings);
+        writeManualOptimizationCache({
+          inputs: manualInputs,
+          result: savings,
+          cachedAt: new Date().toISOString(),
+        });
       }
     } catch (err) {
       console.warn('Manual optimization failed:', err);
+      const fallback = readManualOptimizationCache();
+      if (fallback?.result) {
+        setManualOptimization(fallback.result);
+      }
     } finally {
       setManualLoading(false);
     }

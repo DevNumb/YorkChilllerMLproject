@@ -138,16 +138,6 @@ function normalizeOptimizerBaseUrl(url) {
   return url.replace(/\/+$/, '');
 }
 
-function buildOptimizerCandidates(url) {
-  const normalized = normalizeOptimizerBaseUrl(url);
-
-  if (normalized.endsWith('/optimize') || normalized.endsWith('/predict')) {
-    return [normalized];
-  }
-
-  return [`${normalized}/optimize`, `${normalized}/predict`];
-}
-
 function calculateWetBulbC(tempC, humidity) {
   const rh = clamp(humidity, 1, 100);
   const tw =
@@ -236,76 +226,6 @@ function findTextField(source, patterns) {
   }
 
   return '';
-}
-
-function deriveResultMetrics(payload, response) {
-  const currentEfficiency =
-    findNumericField(response, [
-      'current_efficiency',
-      'baseline_efficiency',
-      'current_kw_ton',
-      'current_kw_per_ton',
-      'kw_per_ton_before',
-      'before_kw_ton',
-    ]) ?? round(0.58 + payload.load_tons / 7000 + payload.wet_bulb_c / 120 + (10 - payload.current_limit_pct / 10) / 100, 3);
-
-  const optimalEfficiency =
-    findNumericField(response, [
-      'optimal_efficiency',
-      'optimized_efficiency',
-      'recommended_efficiency',
-      'optimal_kw_ton',
-      'optimal_kw_per_ton',
-      'kw_per_ton_after',
-      'after_kw_ton',
-    ]) ?? round(currentEfficiency * 0.92, 3);
-
-  const recommendedSetpoint =
-    findNumericField(response, [
-      'recommended_chw_setpoint',
-      'optimal_chw_setpoint',
-      'recommended_setpoint',
-      'chw_setpoint_recommendation',
-      'suggested_chw_setpoint',
-    ]) ?? round(clamp(payload.current_chw_setpoint_c + 1.0, 5, 10), 1);
-
-  const improvementPercent =
-    findNumericField(response, [
-      'improvement_pct',
-      'efficiency_improvement',
-      'efficiency_improvement_pct',
-      'potential_savings',
-      'savings_pct',
-    ]) ??
-    round(((currentEfficiency - optimalEfficiency) / currentEfficiency) * 100, 1);
-
-  const energySavingsKwh =
-    findNumericField(response, ['energy_savings_kwh', 'expected_energy_savings', 'savings_kwh']) ??
-    round(payload.load_tons * 0.55 * (improvementPercent / 100), 1);
-
-  const costSavingsUsd =
-    findNumericField(response, ['cost_savings', 'savings_usd', 'dollar_savings']) ??
-    round(energySavingsKwh * 0.12, 2);
-
-  const co2ReductionKg =
-    findNumericField(response, ['co2_reduction', 'co2_kg', 'emissions_reduction']) ??
-    round(energySavingsKwh * 0.42, 1);
-
-  const operatorAction =
-    findTextField(response, ['operator_action', 'action', 'recommendation']) ||
-    buildOperatorAction(payload.current_chw_setpoint_c, recommendedSetpoint);
-
-  return {
-    currentEfficiency: round(currentEfficiency, 3),
-    optimalEfficiency: round(optimalEfficiency, 3),
-    improvementPercent: round(improvementPercent, 1),
-    energySavingsKwh: round(energySavingsKwh, 1),
-    costSavingsUsd: round(costSavingsUsd, 2),
-    co2ReductionKg: round(co2ReductionKg, 1),
-    recommendedSetpoint: round(recommendedSetpoint, 1),
-    operatorAction,
-    raw: response,
-  };
 }
 
 function buildOperatorAction(currentSetpoint, recommendedSetpoint) {
@@ -616,54 +536,61 @@ export default function Dashboard() {
     setError('');
 
     try {
-      const payload = buildDashboardPredictionInput(inputs);
+      // Use the service layer instead of direct API calls
+      const savings = await calculateSavings(
+        inputs.load_tons,
+        inputs.wet_bulb_c,
+        inputs.hour,
+        inputs.month,
+        inputs.is_weekend,
+        inputs.current_limit_pct,
+        [inputs.chillers_running],
+        inputs.current_chw_setpoint_c
+      );
 
-      const candidates = buildOptimizerCandidates(OPTIMIZER_URL);
-      let response = null;
-      let lastError = null;
+      if (savings) {
+        // Create metrics from the savings result
+        const metrics = {
+          optimalEfficiency: savings.optimalConfig.kwPerTr,
+          currentEfficiency: savings.currentConfig.kwPerTr,
+          improvementPercent: savings.improvementPercent,
+          optimalSetpoint: savings.optimalConfig.setpoint,
+          recommendedChillers: savings.optimalConfig.chillers,
+          powerSaved: savings.powerSaved,
+          costSavingsPerHour: savings.costSavingsPerHour,
+          co2ReductionPerHour: savings.co2ReductionPerHour,
+        };
 
-      for (const candidate of candidates) {
-        try {
-          const attempt = await fetch(candidate, {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify(payload),
-          });
+        const entry = {
+          id: crypto.randomUUID(),
+          timestamp: new Date().toISOString(),
+          inputs: { ...inputs },
+          result: metrics,
+        };
 
-          if (attempt.ok) {
-            response = attempt;
-            break;
-          }
+        setResult(entry);
+        setHistory((current) => [entry, ...current].slice(0, 10));
 
-          lastError = new Error(`Optimizer returned ${attempt.status} for ${candidate}`);
-        } catch (candidateError) {
-          lastError = candidateError;
-        }
+        await runChillerOptimization(inputs);
+      } else {
+        throw new Error('No optimization result received from service');
       }
-
-      if (!response) {
-        throw lastError || new Error('No optimizer endpoint responded successfully');
-      }
-
-      const data = await response.json();
-      const metrics = deriveResultMetrics(inputs, data);
-      const entry = {
-        id: crypto.randomUUID(),
-        timestamp: new Date().toISOString(),
-        inputs: { ...inputs },
-        apiPayload: payload,
-        result: metrics,
-      };
-
-      setResult(entry);
-      setHistory((current) => [entry, ...current].slice(0, 10));
-
-      await runChillerOptimization(inputs);
     } catch (requestError) {
+      const lastRecommendation = history[0] || null;
+      const lastStagingRecommendation = optimizationHistory[0]?.result || null;
+
+      if (lastRecommendation) {
+        setResult(lastRecommendation);
+      }
+
+      if (lastStagingRecommendation) {
+        setChillerOptimization(lastStagingRecommendation);
+      }
+
       setError(
-        'The optimization service could not be reached at /optimize or /predict. Check the Space URL, endpoint path, and CORS settings.',
+        lastRecommendation
+          ? 'The optimization service could not be reached at /optimize or /predict. Showing the last successful recommendation.'
+          : 'The optimization service could not be reached at /optimize or /predict. Check the Space URL, endpoint path, and CORS settings.',
       );
     } finally {
       setLoading(false);

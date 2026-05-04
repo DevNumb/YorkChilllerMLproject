@@ -1,158 +1,157 @@
-# PLAN: Fix API Connection for Dashboard Recommendations & Tomorrow's Energy Forecast
+## MISSION: Fix Dashboard to Work with Actual Hugging Face Space API
 
-## THE PROBLEM
-API cannot be reached at /optimize or /predict. Need to discover correct endpoints and fix inputs.
+### UNDERSTANDING THE REAL API
 
-## STRICT RULES - READ FIRST
+The Space has 12 EXACT feature names:
 
-✓ ONLY modify API calls and data fetching logic
-✓ DO NOT change any UI components, layouts, or styling
-✓ DO NOT change how data is DISPLAYED - only how data is FETCHED
-✓ DO NOT modify Dashboard page structure - only the API call inside it
-✓ DO NOT modify Energy Forecast page UI - only the data source
-✓ DO NOT touch Maintenance page
-✓ DO NOT touch AI Assistant page
-✓ DO NOT change routing or navigation
-✓ If existing code works, LEAVE IT ALONE
-✓ Only add error handling, don't remove existing error handling
-✓ Test that existing features still work after each change
+1. total_building_load (RT) - cooling load in tons
+2. avg_chilled_water_rate (L/sec) - chilled water flow rate
+3. avg_cooling_water_temp (°C) - cooling water temperature
+4. avg_outside_temp (°F) - outside temperature
+5. avg_dew_point (°F) - dew point
+6. avg_humidity (%) - relative humidity
+7. avg_wind_speed (mph) - wind speed
+8. avg_pressure (in Hg) - atmospheric pressure
+9. hour (0-23) - hour of day
+10. day_of_week (0-6, 0=Monday) - day of week
+11. month (1-12) - month
+12. day_of_year (1-366) - day of year
 
-## STEP 1: DISCOVER CORRECT API URL
+Plus optional: current_chw_setpoint_c (°C) for optimization
 
-Test these URLs WITHOUT changing any code first. Use browser console only.
+### WHAT THE DASHBOARD CURRENTLY SHOWS (from image)
 
-URL OPTION A:
-https://DevNumb-MLYorkchillerOptimzer.hf.space
+Current inputs displayed:
+- Cooling Load: 2500 tons
+- Wet Bulb Temp: 19.9°C
+- Current CHW Setpoint: 6.5°C
+- Current Limit: 90%
+- Hour: 17:00
+- Month: May
+- Weekend: No
+- Chillers Running: 1, 2, 3, 4
 
-URL OPTION B:
-https://huggingface.co/spaces/DevNumb/MLYorkchillerOptimzer
+### THE PROBLEM
 
-For each URL, test:
-- GET /health
-- GET /
-- POST /predict
+Dashboard is sending WRONG input names to the API. It sends "wet_bulb_temp", "chillers_running", etc. but API expects completely different feature names like "avg_chilled_water_rate", "avg_cooling_water_temp", "avg_outside_temp", etc.
 
-## STEP 2: DISCOVER CORRECT INPUT FORMAT
+### STEP 1 - MAP DASHBOARD INPUTS TO API FEATURES
 
-The model expects 12 features. Find the exact format.
+Map what Dashboard has to what API needs:
 
-Try format A (array):
+Dashboard "Cooling Load 2500 tons" → total_building_load
+Dashboard needs to provide: avg_chilled_water_rate (get from plant)
+Dashboard needs to provide: avg_cooling_water_temp (get from plant)
+Dashboard "Wet Bulb Temp 19.9°C" → NOT directly used - need avg_outside_temp in °F
+Dashboard needs: avg_dew_point, avg_humidity, avg_wind_speed, avg_pressure
+Dashboard "Hour 17:00" → hour
+Dashboard "Month May" → month
+Dashboard "Weekend No" → convert to day_of_week (0-6)
+Dashboard also needs: day_of_year (calculate from date)
+
+### STEP 2 - ADD MISSING DATA SOURCES
+
+Dashboard must now collect or estimate these missing features:
+- avg_chilled_water_rate (typical: 200-400 L/sec)
+- avg_cooling_water_temp (from cooling tower, related to wet bulb)
+- avg_outside_temp (convert from °C to °F)
+- avg_dew_point (estimate from wet bulb)
+- avg_humidity (typical: 40-80%)
+- avg_wind_speed (typical: 5-15 mph)
+- avg_pressure (typical: 29.8-30.2 in Hg)
+- day_of_week (calculate from date)
+- day_of_year (calculate from date)
+
+### STEP 3 - FIX DASHBOARD API CALL
+
+In Dashboard, replace current API call with:
+
+Call POST to: https://DevNumb-MLYorkchillerOptimzer.hf.space/predict
+
+Body must be EXACT 12 features:
+
 {
-  "features": [1200, 18.6, 6.5, 90, 10, 5, 0, 1, 1, 0, 0, 2]
-}
-
-Try format B (named):
-{
-  "cooling_load": 1200,
-  "wet_bulb_temp": 18.6,
-  "chw_setpoint": 6.5,
-  "current_limit": 90,
-  "hour": 10,
+  "total_building_load": 2500,
+  "avg_chilled_water_rate": 300,
+  "avg_cooling_water_temp": 24,
+  "avg_outside_temp": 86,
+  "avg_dew_point": 68,
+  "avg_humidity": 65,
+  "avg_wind_speed": 8,
+  "avg_pressure": 29.92,
+  "hour": 17,
+  "day_of_week": 4,
   "month": 5,
-  "weekend": 0,
-  "chiller1": 1,
-  "chiller2": 1,
-  "chiller3": 0,
-  "chiller4": 0,
-  "total_chillers": 2
+  "day_of_year": 135,
+  "current_chw_setpoint_c": 6.5
 }
 
-Try format C (DataFrame):
-{
-  "data": [[1200, 18.6, 6.5, 90, 10, 5, 0, 1, 1, 0, 0, 2]]
-}
+### STEP 4 - GET RECOMMENDATIONS FROM /OPTIMIZE
 
-## STEP 3: FIX API SERVICE FILE
+Dashboard should call /optimize endpoint with SAME 12 features.
 
-In src/services/api.ts (or create if doesn't exist):
+/optimize returns:
+- current_kw_per_tr
+- optimal_kw_per_tr  
+- efficiency_improvement_pct
+- recommendations (including CHW setpoint changes)
+- summary
 
-ONLY change:
-- Base URL to use working endpoint
-- Request body format to match working format
-- Response parsing to match actual response
+### STEP 5 - REMOVE CHILLER STAGING FROM RECOMMENDATIONS
 
-DO NOT change:
-- Any other functions
-- How existing components use the API
-- Any UI or display logic
+Based on the API code, the model does NOT predict based on which chillers are running. The API only optimizes SETPOINT, not chiller staging.
 
-## STEP 4: FIX DASHBOARD RECOMMENDATION API CALL
+Therefore, Dashboard should ONLY recommend:
+- CHW Setpoint changes
+- Chiller sequencing based on load (if load <600 RT, run single chiller)
+- Free cooling if conditions allow
 
-In src/pages/Dashboard.tsx:
+Remove chiller staging from recommendation display.
 
-Find where it calls the optimizer API. ONLY change:
-- The URL being called
-- The request body structure
-- How it extracts kW/TR from response
+### STEP 6 - UPDATE DASHBOARD UI
 
-DO NOT change:
-- How recommendations are displayed
-- Any styling or layout
-- Any other calculations
-- Any other part of Dashboard
+Change recommendation display to show what API actually provides:
 
-## STEP 5: IMPLEMENT TOMORROW'S FORECAST
+RECOMMENDATIONS FROM API:
+- CHW Setpoint Optimization: X°C → Y°C (X% savings)
+- Chiller Sequencing: based on load
+- Free Cooling: if conditions allow
 
-In src/pages/EnergyForecast.tsx:
+SUMMARY:
+- Current efficiency: X.XXX kW/TR
+- Optimal efficiency: X.XXX kW/TR
+- Potential savings: X%
+- Efficiency rating: Excellent/Good/Fair/Poor
 
-ONLY add new functions for fetching tomorrow's data. DO NOT remove existing code.
+### STEP 7 - CALCULATE SAVINGS CORRECTLY
 
-Add:
-- Function to get tomorrow's hourly predictions using same API
-- Keep existing display code intact
-- If adding new display elements, add them BELOW existing content
-- DO NOT remove or replace existing charts or data
+Use API's returned efficiency_improvement_pct
+Use API's returned current_kw_per_tr and optimal_kw_per_tr
 
-## STEP 6: ADD FALLBACK FOR API FAILURE
+Savings Power = Load × (current_kw - optimal_kw)
 
-Add error handling that:
-- Shows error message but keeps page working
-- Uses last successful data if available
-- Does NOT crash or blank out the page
+Display:
+- Current total power: X kW
+- Optimal total power: X kW
+- Savings: X kW per hour
 
-## STEP 7: UPDATE ENVIRONMENT VARIABLE
+### RULES
 
-In .env file:
-VITE_OPTIMIZER_URL=https://DevNumb-MLYorkchillerOptimzer.hf.space
+- DO NOT send "chillers_running" to API - API doesn't use it
+- DO NOT send "wet_bulb_temp" - convert to needed features
+- DO NOT guess chiller staging - API only optimizes setpoint
+- ONLY modify Dashboard API call and recommendation display
+- DO NOT touch any other pages or functionality
 
-DO NOT change any other environment variables.
+### FILES TO MODIFY
 
-## VERIFICATION CHECKLIST - ALL MUST WORK AFTER CHANGES
+- src/pages/Dashboard.tsx - API call and recommendation section only
+- src/services/api.ts - If exists, update the request/response mapping
 
-Dashboard Page:
-☐ Still loads without errors
-☐ All existing charts display
-☐ All existing data shows
-☐ Recommendation card still visible
-☐ ONLY the API data should be different (savings now correct)
+### START
 
-Energy Forecast Page:
-☐ Still loads without errors
-☐ Existing forecast displays
-☐ New tomorrow forecast added (not replacing existing)
-☐ Page layout unchanged
-
-Other Pages:
-☐ Maintenance page works (no changes made)
-☐ AI Assistant page works (no changes made)
-☐ Navigation between pages works
-
-## ROLLBACK PLAN
-
-If anything breaks:
-1. Revert only the API URL change
-2. Keep using original hardcoded URL
-3. Report what broke
-
-## WHAT TO REPORT
-
-After fixing, tell me:
-1. Which URL pattern worked
-2. Which input format worked  
-3. Dashboard still displays all existing data
-4. No other pages were affected
-5. What exactly was changed (list files and lines)
-
-## START
-
-Open browser console on Hugging Face Space. Run fetch tests WITHOUT changing code. When you find working URL/format, ONLY update the API service file. Test Dashboard still works. Then add tomorrow forecast.
+1. Read Dashboard's current API call
+2. Replace with the 12-feature format above
+3. Add helper functions to calculate missing features (day_of_week, day_of_year)
+4. Display recommendations from /optimize response
+5. Test that savings are now calculated correctly
