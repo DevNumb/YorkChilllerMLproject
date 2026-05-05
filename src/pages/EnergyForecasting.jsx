@@ -104,24 +104,20 @@ function RangeField({ label, name, value, min, max, step, suffix, onChange }) {
 }
 
 export default function EnergyForecasting() {
-  const cachedForecast = readForecastCache();
-  const cachedManualOptimization = readManualOptimizationCache();
-
-  const [tomorrowDate, setTomorrowDate] = useState(() => cachedForecast?.tomorrowDate || '');
-  const [schedule24h, setSchedule24h] = useState(() => cachedForecast?.schedule24h || []);
-  const [dailySummary, setDailySummary] = useState(() => cachedForecast?.dailySummary || null);
-  const [loading, setLoading] = useState(true);
+  const [tomorrowDate, setTomorrowDate] = useState('');
+  const [schedule24h, setSchedule24h] = useState([]);
+  const [dailySummary, setDailySummary] = useState(null);
+  const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
   const [manualInputs, setManualInputs] = useState({
     load_tons: 800,
-    wet_bulb_c: 20,
+    wet_bulb_c: 18,
     current_chw_setpoint_c: 6.5,
     current_limit_pct: 85,
     chillers_running: 2,
   });
-
-  const [manualOptimization, setManualOptimization] = useState(() => cachedManualOptimization?.result || null);
+  const [manualOptimization, setManualOptimization] = useState(null);
   const [manualLoading, setManualLoading] = useState(false);
 
   const generateTomorrow24hSchedule = useCallback(async () => {
@@ -137,43 +133,82 @@ export default function EnergyForecasting() {
 
       const schedule = [];
       let totalEnergy = 0;
-      let totalPower = 0;
       const chillerUsage = {};
       const setpointUsage = {};
 
       for (let hour = 0; hour < 24; hour++) {
         const load = 800 + 300 * Math.sin(hour / 6);
         const wetBulb = 18 + 8 * Math.sin(hour / 8);
+        const setpoint = 6.5;
+        const chillerCount = load < 600 ? 1 : load < 900 ? 2 : load < 1200 ? 3 : 4;
 
-        const savings = await calculateSavings(
-          load,
-          wetBulb,
-          hour,
-          tomorrowMonth,
-          isWeekend,
-          85,
-          [2],
-          6.5
-        );
+        try {
+          const avgOutsideTemp = Math.max(32, wetBulb * 1.5 + 12);
+          const avgDewPoint = Math.max(20, wetBulb + 2);
+          const avgChilledWaterRate = Math.max(50, load / 20);
 
-        if (savings) {
+          const predictionInput = {
+            total_building_load: load,
+            avg_chilled_water_rate: avgChilledWaterRate,
+            avg_cooling_water_temp: setpoint + 1,
+            avg_outside_temp: avgOutsideTemp,
+            avg_dew_point: avgDewPoint,
+            avg_humidity: 60,
+            avg_wind_speed: 5,
+            avg_pressure: 30,
+            hour,
+            day_of_week: isWeekend ? 0 : 1,
+            month: tomorrowMonth,
+            day_of_year: Math.round((tomorrowMonth - 1) * 30 + 15),
+          };
+
+          const response = await fetch(`${OPTIMIZER_URL}/predict`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(predictionInput),
+          });
+
+          let kwPerTr = 0.6;
+          if (response.ok) {
+            const data = await response.json();
+            kwPerTr = data.kw_per_tr || 0.6;
+          }
+
+          const stageFactor = 1 + (Math.abs(load / chillerCount - 500) / 500) * 0.1;
+          const hourTotalPower = load * kwPerTr * stageFactor;
+
           const hourData = {
             hour: `${String(hour).padStart(2, '0')}:00`,
             load: round(load, 0),
             wetBulb: round(wetBulb, 1),
-            recChillers: savings.optimalConfig.chillers.join(','),
-            recSetpoint: savings.optimalConfig.setpoint,
-            kwPerTr: savings.optimalConfig.kwPerTr,
-            totalPower: savings.optimalConfig.totalPower,
+            recChillers: chillerCount,
+            recSetpoint: setpoint,
+            kwPerTr: round(kwPerTr, 3),
+            totalPower: round(hourTotalPower, 1),
           };
 
           schedule.push(hourData);
-          totalEnergy += savings.optimalConfig.totalPower;
-          totalPower += savings.optimalConfig.totalPower;
+          totalEnergy += hourTotalPower;
 
-          const chillerKey = savings.optimalConfig.chillers.join(',');
+          const chillerKey = String(chillerCount);
           chillerUsage[chillerKey] = (chillerUsage[chillerKey] || 0) + 1;
-          setpointUsage[savings.optimalConfig.setpoint] = (setpointUsage[savings.optimalConfig.setpoint] || 0) + 1;
+          setpointUsage[setpoint] = (setpointUsage[setpoint] || 0) + 1;
+        } catch (hourError) {
+          console.warn(`Hour ${hour} prediction failed:`, hourError);
+          const kwPerTr = 0.6;
+          const stageFactor = 1 + (Math.abs(load / chillerCount - 500) / 500) * 0.1;
+          const hourTotalPower = load * kwPerTr * stageFactor;
+
+          schedule.push({
+            hour: `${String(hour).padStart(2, '0')}:00`,
+            load: round(load, 0),
+            wetBulb: round(wetBulb, 1),
+            recChillers: chillerCount,
+            recSetpoint: setpoint,
+            kwPerTr: round(kwPerTr, 3),
+            totalPower: round(hourTotalPower, 1),
+          });
+          totalEnergy += hourTotalPower;
         }
       }
 
@@ -184,11 +219,11 @@ export default function EnergyForecasting() {
 
       const nextSummary = {
         totalEnergy: round(totalEnergy, 0),
-        avgKwPerTr: round(totalPower / 24 / 800, 3),
-        mostUsedChillers: mostUsedChiller ? mostUsedChiller[0] : 'N/A',
+        avgKwPerTr: round(totalEnergy / 24 / 800, 3),
+        mostUsedChillers: mostUsedChiller ? mostUsedChiller[0] : '2',
         setpointMin: setpointRange[0] || 6.5,
         setpointMax: setpointRange[setpointRange.length - 1] || 6.5,
-        peakHour: schedule.reduce((max, h) => h.totalPower > max.totalPower ? h : max, schedule[0]),
+        peakHour: schedule.reduce((max, h) => (h.totalPower > max.totalPower ? h : max), schedule[0] || {}),
       };
 
       setDailySummary(nextSummary);
@@ -218,398 +253,47 @@ export default function EnergyForecasting() {
     setManualLoading(true);
     try {
       const now = new Date();
-      const savings = await calculateSavings(
-        manualInputs.load_tons,
-        manualInputs.wet_bulb_c,
-        now.getHours(),
-        now.getMonth() + 1,
-        [0, 6].includes(now.getDay()) ? 1 : 0,
-        manualInputs.current_limit_pct,
-        [manualInputs.chillers_running],
-        manualInputs.current_chw_setpoint_c
-      );
+      const avgOutsideTemp = Math.max(32, manualInputs.wet_bulb_c * 1.5 + 12);
+      const avgDewPoint = Math.max(20, manualInputs.wet_bulb_c + 2);
+      const avgChilledWaterRate = Math.max(50, manualInputs.load_tons / 20);
 
-      if (savings) {
-        setManualOptimization(savings);
+      const predictionInput = {
+        total_building_load: manualInputs.load_tons,
+        avg_chilled_water_rate: avgChilledWaterRate,
+        avg_cooling_water_temp: manualInputs.current_chw_setpoint_c + 1,
+        avg_outside_temp: avgOutsideTemp,
+        avg_dew_point: avgDewPoint,
+        avg_humidity: 60,
+        avg_wind_speed: 5,
+        avg_pressure: 30,
+        hour: now.getHours(),
+        day_of_week: [0, 6].includes(now.getDay()) ? 0 : 1,
+        month: now.getMonth() + 1,
+        day_of_year: Math.round((now.getMonth() * 30) + now.getDate()),
+      };
+
+      const response = await fetch(`${OPTIMIZER_URL}/predict`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(predictionInput),
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        const kwPerTr = data.kw_per_tr || 0.6;
+        const totalPower = manualInputs.load_tons * kwPerTr;
+
+        setManualOptimization({
+          kwPerTr,
+          totalPower: round(totalPower, 1),
+          efficiency: round(1 / (kwPerTr / 0.6), 2),
+          timestamp: new Date().toISOString(),
+        });
+
         writeManualOptimizationCache({
           inputs: manualInputs,
-          result: savings,
+          result: { kwPerTr, totalPower: round(totalPower, 1) },
           cachedAt: new Date().toISOString(),
         });
-      }
-    } catch (err) {
-      console.warn('Manual optimization failed:', err);
-      const fallback = readManualOptimizationCache();
-      if (fallback?.result) {
-        setManualOptimization(fallback.result);
-      }
-    } finally {
-      setManualLoading(false);
-    }
-  }, [manualInputs]);
-
-  useEffect(() => {
-    generateTomorrow24hSchedule();
-  }, [generateTomorrow24hSchedule]);
-
-  const updateManualInput = (name, value) => {
-    setManualInputs((current) => ({
-      ...current,
-      [name]: value,
-    }));
-  };
-
-  return (
-    <div className="dashboard-page">
-      <div className="background-grid" />
-
-      <header className="hero-card glass-card">
-        <div>
-          <p className="eyebrow">Energy Planning</p>
-          <h1>Tomorrow's Optimal Schedule</h1>
-          <p className="hero-copy">
-            24-hour chiller staging and setpoint optimization with real-time analysis tool.
-          </p>
-        </div>
-        <div className="hero-meta">
-          <div className="meta-pill">
-            <span>Forecast Date</span>
-            <strong>{tomorrowDate || 'Loading...'}</strong>
-          </div>
-          <div className="meta-pill">
-            <span>Status</span>
-            <strong style={{ color: loading ? '#eab308' : '#4be4a4' }}>
-              {loading ? '● Generating' : '● Ready'}
-            </strong>
-          </div>
-        </div>
-      </header>
-
-      <main className="dashboard-grid-redesign">
-        {/* 24-HOUR SCHEDULE TABLE */}
-        <div className="grid-row row-full">
-          <section className="glass-card panel-stack">
-            <div className="section-title-row">
-              <div>
-                <p className="section-label">24-Hour Optimal Schedule</p>
-                <h2>Recommended Chiller Staging & Setpoints</h2>
-              </div>
-              <button type="button" className="primary-button" onClick={generateTomorrow24hSchedule} disabled={loading}>
-                {loading ? 'Generating...' : 'Refresh Schedule'}
-              </button>
-            </div>
-
-            {error && (
-              <div style={{ padding: '8px 14px', borderRadius: 12, background: 'rgba(255,107,125,0.1)', border: '1px solid rgba(255,107,125,0.2)', color: '#ff6b7d', fontSize: '0.85rem', marginBottom: 16 }}>
-                {error}
-              </div>
-            )}
-
-            {loading ? (
-              <div className="loading-state" style={{ minHeight: 200, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                <div className="spinner" />
-                <span style={{ marginLeft: 16, color: 'var(--muted)' }}>Generating 24-hour schedule...</span>
-              </div>
-            ) : schedule24h.length > 0 ? (
-              <div style={{ overflowX: 'auto', marginBottom: 16 }}>
-                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem' }}>
-                  <thead>
-                    <tr style={{ borderBottom: '1px solid rgba(255,255,255,0.1)' }}>
-                      <th style={{ padding: '8px', textAlign: 'left', color: '#7fe6ff' }}>Hour</th>
-                      <th style={{ padding: '8px', textAlign: 'left', color: '#7fe6ff' }}>Load (tons)</th>
-                      <th style={{ padding: '8px', textAlign: 'left', color: '#7fe6ff' }}>Wet Bulb (°C)</th>
-                      <th style={{ padding: '8px', textAlign: 'left', color: '#7fe6ff' }}>Rec Chillers</th>
-                      <th style={{ padding: '8px', textAlign: 'left', color: '#7fe6ff' }}>Setpoint (°C)</th>
-                      <th style={{ padding: '8px', textAlign: 'left', color: '#7fe6ff' }}>kW/TR</th>
-                      <th style={{ padding: '8px', textAlign: 'left', color: '#7fe6ff' }}>Total Power (kW)</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {schedule24h.map((row, idx) => (
-                      <tr key={idx} style={{ borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
-                        <td style={{ padding: '8px', color: '#f5fbff' }}>{row.hour}</td>
-                        <td style={{ padding: '8px', color: '#f5fbff' }}>{row.load}</td>
-                        <td style={{ padding: '8px', color: '#f5fbff' }}>{row.wetBulb}</td>
-                        <td style={{ padding: '8px', color: '#53f2a8', fontWeight: 'bold' }}>[{row.recChillers}]</td>
-                        <td style={{ padding: '8px', color: '#f7df72' }}>{row.recSetpoint}</td>
-                        <td style={{ padding: '8px', color: '#7fe6ff' }}>{row.kwPerTr.toFixed(3)}</td>
-                        <td style={{ padding: '8px', color: '#81f5b6', fontWeight: 'bold' }}>{row.totalPower.toFixed(0)}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            ) : null}
-          </section>
-        </div>
-
-        {/* DAILY SUMMARY */}
-        {dailySummary && (
-          <div className="grid-row row-3-cols">
-            <section className="glass-card panel-stack">
-              <div className="section-title-row">
-                <div>
-                  <p className="section-label">Daily Summary</p>
-                  <h2>Tomorrow's Totals</h2>
-                </div>
-              </div>
-              <div className="weather-grid">
-                <MetricCard
-                  label="Total Energy"
-                  value={`${dailySummary.totalEnergy} kWh`}
-                  hint="24-hour consumption"
-                  accent="#64d6ff"
-                />
-                <MetricCard
-                  label="Average kW/TR"
-                  value={`${dailySummary.avgKwPerTr.toFixed(3)}`}
-                  hint="Mean efficiency"
-                  accent="#7fe6ff"
-                />
-                <MetricCard
-                  label="Peak Hour"
-                  value={dailySummary.peakHour.hour}
-                  hint={`${dailySummary.peakHour.totalPower.toFixed(0)} kW`}
-                  accent="#ff9f5a"
-                />
-              </div>
-            </section>
-
-            <section className="glass-card panel-stack">
-              <div className="section-title-row">
-                <div>
-                  <p className="section-label">Chiller Strategy</p>
-                  <h2>Configuration</h2>
-                </div>
-              </div>
-              <div className="weather-grid">
-                <MetricCard
-                  label="Most Used"
-                  value={`[${dailySummary.mostUsedChillers}]`}
-                  hint="Primary configuration"
-                  accent="#53f2a8"
-                />
-                <MetricCard
-                  label="Setpoint Range"
-                  value={`${dailySummary.setpointMin}–${dailySummary.setpointMax}°C`}
-                  hint="Temperature variation"
-                  accent="#8ef5bf"
-                />
-                <MetricCard
-                  label="Optimization"
-                  value="Active"
-                  hint="Real-time scheduling"
-                  accent="#4be4a4"
-                />
-              </div>
-            </section>
-
-            <section className="glass-card panel-stack">
-              <div className="section-title-row">
-                <div>
-                  <p className="section-label">Power Profile</p>
-                  <h2>Expected Load</h2>
-                </div>
-              </div>
-              <div className="weather-grid">
-                <MetricCard
-                  label="Min Power"
-                  value={`${Math.min(...schedule24h.map(h => h.totalPower)).toFixed(0)} kW`}
-                  hint="Lowest hour"
-                  accent="#81f5b6"
-                />
-                <MetricCard
-                  label="Max Power"
-                  value={`${Math.max(...schedule24h.map(h => h.totalPower)).toFixed(0)} kW`}
-                  hint="Peak hour"
-                  accent="#ff6b7d"
-                />
-                <MetricCard
-                  label="Avg Power"
-                  value={`${(dailySummary.totalEnergy / 24).toFixed(0)} kW`}
-                  hint="Mean power draw"
-                  accent="#7fe6ff"
-                />
-              </div>
-            </section>
-          </div>
-        )}
-
-        {/* POWER PROFILE CHART */}
-        {schedule24h.length > 0 && (
-          <div className="grid-row row-full">
-            <section className="glass-card panel-stack">
-              <div className="section-title-row">
-                <div>
-                  <p className="section-label">Power Profile</p>
-                  <h2>Expected Total Power by Hour</h2>
-                </div>
-              </div>
-              <ResponsiveContainer width="100%" height={300}>
-                <BarChart data={schedule24h} margin={{ top: 20, right: 30, left: 0, bottom: 0 }}>
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis dataKey="hour" />
-                  <YAxis label={{ value: 'kW', angle: -90, position: 'insideLeft' }} />
-                  <Tooltip />
-                  <Legend />
-                  <Bar dataKey="totalPower" fill="#64d6ff" name="Total Power (kW)" />
-                </BarChart>
-              </ResponsiveContainer>
-            </section>
-          </div>
-        )}
-
-        {/* REAL-TIME OPTIMIZATION TOOL */}
-        <div className="grid-row row-2-cols">
-          <section className="glass-card panel-stack input-panel">
-            <div className="section-title-row">
-              <div>
-                <p className="section-label">Real-Time Optimization</p>
-                <h2>Manual Analysis Tool</h2>
-              </div>
-              <button type="button" className="primary-button" onClick={runManualOptimization} disabled={manualLoading}>
-                {manualLoading ? 'Optimizing...' : 'Optimize Now'}
-              </button>
-            </div>
-
-            <div className="inputs-grid">
-              <RangeField
-                label="Cooling Load"
-                name="load_tons"
-                value={manualInputs.load_tons}
-                min={200}
-                max={2000}
-                step={50}
-                suffix=" tons"
-                onChange={updateManualInput}
-              />
-              <RangeField
-                label="Wet Bulb Temp"
-                name="wet_bulb_c"
-                value={manualInputs.wet_bulb_c}
-                min={10}
-                max={30}
-                step={0.5}
-                suffix="°C"
-                onChange={updateManualInput}
-              />
-              <RangeField
-                label="Current Setpoint"
-                name="current_chw_setpoint_c"
-                value={manualInputs.current_chw_setpoint_c}
-                min={5}
-                max={10}
-                step={0.1}
-                suffix="°C"
-                onChange={updateManualInput}
-              />
-              <RangeField
-                label="Current Limit"
-                name="current_limit_pct"
-                value={manualInputs.current_limit_pct}
-                min={50}
-                max={100}
-                step={1}
-                suffix="%"
-                onChange={updateManualInput}
-              />
-            </div>
-
-            <div className="compact-grid">
-              <div className="field-card">
-                <div className="field-heading">
-                  <span>Chillers Running</span>
-                  <strong>{manualInputs.chillers_running}</strong>
-                </div>
-                <div className="toggle-group">
-                  {[1, 2, 3, 4].map((count) => (
-                    <button
-                      key={count}
-                      type="button"
-                      className={count === manualInputs.chillers_running ? 'choice-button active' : 'choice-button'}
-                      onClick={() => updateManualInput('chillers_running', count)}
-                    >
-                      {count}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            </div>
-          </section>
-
-          {manualOptimization && (
-            <section className="glass-card panel-stack result-panel">
-              <div className="section-title-row">
-                <div>
-                  <p className="section-label">Optimization Result</p>
-                  <h2>Recommended Configuration</h2>
-                </div>
-                <span className="status-pill" style={{ backgroundColor: manualOptimization.powerSaved > 0 ? '#53f2a822' : '#ff6b7d22', color: manualOptimization.powerSaved > 0 ? '#53f2a8' : '#ff6b7d' }}>
-                  {manualOptimization.powerSaved > 0 ? '✓ Savings' : '✗ No Savings'}
-                </span>
-              </div>
-
-              <div className="weather-grid">
-                <MetricCard
-                  label="Optimal Chillers"
-                  value={`[${manualOptimization.optimalConfig.chillers.join(', ')}]`}
-                  hint="Recommended units"
-                  accent="#53f2a8"
-                />
-                <MetricCard
-                  label="Optimal Setpoint"
-                  value={`${manualOptimization.optimalConfig.setpoint.toFixed(1)}°C`}
-                  hint="Recommended temperature"
-                  accent="#81f5b6"
-                />
-                <MetricCard
-                  label="Expected kW/TR"
-                  value={`${manualOptimization.optimalConfig.kwPerTr.toFixed(3)}`}
-                  hint="Optimized efficiency"
-                  accent="#8ef5bf"
-                />
-                <MetricCard
-                  label="Expected Power"
-                  value={`${manualOptimization.optimalConfig.totalPower.toFixed(0)} kW`}
-                  hint="Optimized power draw"
-                  accent="#4be4a4"
-                />
-              </div>
-
-              {manualOptimization.powerSaved > 0 && (
-                <div style={{ marginTop: 16, padding: 12, borderRadius: 8, background: 'rgba(83,242,168,0.1)', border: '1px solid rgba(83,242,168,0.2)' }}>
-                  <div className="weather-grid">
-                    <MetricCard
-                      label="Power Saved"
-                      value={`${manualOptimization.powerSaved.toFixed(1)} kW`}
-                      hint="Reduction"
-                      accent="#53f2a8"
-                    />
-                    <MetricCard
-                      label="Improvement"
-                      value={`${manualOptimization.improvementPercent.toFixed(1)}%`}
-                      hint="Efficiency gain"
-                      accent="#81f5b6"
-                    />
-                    <MetricCard
-                      label="Cost/Hour"
-                      value={`$${manualOptimization.costSavingsPerHour.toFixed(2)}`}
-                      hint="Hourly savings"
-                      accent="#7fe6ff"
-                    />
-                    <MetricCard
-                      label="CO2/Hour"
-                      value={`${manualOptimization.co2ReductionPerHour.toFixed(1)} kg`}
-                      hint="Emissions avoided"
-                      accent="#f7df72"
-                    />
-                  </div>
-                </div>
-              )}
-            </section>
-          )}
-        </div>
-      </main>
-    </div>
-  );
-}
+      } else {
+        throw new Error(`HTTP ${response.status}`);\n      }\n    } catch (err) {\n      console.warn('Manual optimization failed:', err);\n      const fallback = readManualOptimizationCache();\n      if (fallback?.result) {\n        setManualOptimization(fallback.result);\n      }\n    } finally {\n      setManualLoading(false);\n    }\n  }, [manualInputs]);\n\n  useEffect(() => {\n    generateTomorrow24hSchedule();\n  }, [generateTomorrow24hSchedule]);\n\n  const updateManualInput = (name, value) => {\n    setManualInputs((current) => ({\n      ...current,\n      [name]: value,\n    }));\n  };\n\n  return (\n    <div className=\"page-container\">\n      <header className="page-header">\n        <h1>📊 Energy Forecasting</h1>\n        <p>24-hour optimization predictions and manual scenario analysis</p>\n      </header>\n\n      {error ? <div className="error-message">{error}</div> : null}\n\n      <section className="section-card">\n        <div className="section-header">\n          <h2>Tomorrow's 24-Hour Schedule: {tomorrowDate}</h2>\n          <button type="button" className="primary-button" onClick={generateTomorrow24hSchedule} disabled={loading}>\n            {loading ? 'Generating...' : '🔄 Refresh Schedule'}\n          </button>\n        </div>\n\n        {dailySummary ? (\n          <div className="metrics-grid">\n            <MetricCard label="Total Energy" value={`${dailySummary.totalEnergy} kWh`} accent="#4CAF50" />\n            <MetricCard label="Avg Efficiency" value={`${dailySummary.avgKwPerTr} kW/tr`} />\n            <MetricCard label="Most Used Chillers\" value={dailySummary.mostUsedChillers} />\n            <MetricCard label=\"Setpoint Range\" value={`${dailySummary.setpointMin}°C - ${dailySummary.setpointMax}°C`} />\n            <MetricCard\n              label=\"Peak Hour\"\n              value={`${dailySummary.peakHour?.hour || 'N/A'} (${dailySummary.peakHour?.totalPower || 0} kW)`}\n              accent=\"#FF9800\"\n            />\n          </div>\n        ) : null}\n\n        {schedule24h.length > 0 ? (\n          <ResponsiveContainer width=\"100%\" height={400}>\n            <LineChart data={schedule24h}>\n              <CartesianGrid strokeDasharray=\"3 3\" />\n              <XAxis dataKey=\"hour\" />\n              <YAxis />\n              <Tooltip />\n              <Legend />\n              <Line type=\"monotone\" dataKey=\"totalPower\" stroke=\"#2196F3\" name=\"Total Power (kW)\" />\n              <Line type=\"monotone\" dataKey=\"load\" stroke=\"#FF9800\" name=\"Load (tons)\" />\n            </LineChart>\n          </ResponsiveContainer>\n        ) : null}\n      </section>\n\n      <section className="section-card">\n        <h2>Manual Optimization Test</h2>\n        <div className="inputs-grid">\n          <RangeField\n            label=\"Building Load\"\n            name=\"load_tons\"\n            value={manualInputs.load_tons}\n            min={100}\n            max={2000}\n            step={50}\n            suffix=\" tons\"\n            onChange={updateManualInput}\n          />\n          <RangeField\n            label=\"Wet Bulb Temperature\"\n            name=\"wet_bulb_c\"\n            value={manualInputs.wet_bulb_c}\n            min={5}\n            max={30}\n            step={0.5}\n            suffix=\"°C\"\n            onChange={updateManualInput}\n          />\n          <RangeField\n            label=\"CHW Setpoint\"\n            name=\"current_chw_setpoint_c\"\n            value={manualInputs.current_chw_setpoint_c}\n            min={5}\n            max={10}\n            step={0.5}\n            suffix=\"°C\"\n            onChange={updateManualInput}\n          />\n          <RangeField\n            label=\"Current Limit\"\n            name=\"current_limit_pct\"\n            value={manualInputs.current_limit_pct}\n            min={50}\n            max={100}\n            step={5}\n            suffix=\"%\"\n            onChange={updateManualInput}\n          />\n          <RangeField\n            label=\"Chillers Running\"\n            name=\"chillers_running\"\n            value={manualInputs.chillers_running}\n            min={1}\n            max={4}\n            step={1}\n            suffix=\"\"\n            onChange={updateManualInput}\n          />\n        </div>\n\n        <button type=\"button\" className=\"primary-button\" onClick={runManualOptimization} disabled={manualLoading}>\n          {manualLoading ? 'Optimizing...' : '⚡ Optimize'}\n        </button>\n\n        {manualOptimization ? (\n          <div className="metrics-grid">\n            <MetricCard label=\"kW/ton\" value={manualOptimization.kwPerTr} />\n            <MetricCard label=\"Total Power\" value={`${manualOptimization.totalPower} kW`} />\n            <MetricCard label=\"Efficiency\" value={manualOptimization.efficiency} />\n          </div>\n        ) : null}\n      </section>\n    </div>\n  );\n}
