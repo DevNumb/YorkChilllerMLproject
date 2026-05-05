@@ -6,6 +6,96 @@ import { getAllTasks, getHistory } from './maintenanceDatabase.js';
 let plantCache = { data: null, timestamp: 0 };
 let maintenanceCache = { data: null, timestamp: 0 };
 
+function clamp(value, min, max) {
+  return Math.min(Math.max(value, min), max);
+}
+
+function round(value, digits = 1) {
+  return Number(value.toFixed(digits));
+}
+
+function extractNumericValue(value) {
+  if (typeof value === 'number') {
+    return Number.isFinite(value) ? value : null;
+  }
+
+  if (typeof value === 'string') {
+    const direct = Number(value);
+    if (!Number.isNaN(direct)) {
+      return direct;
+    }
+
+    const matched = value.match(/-?\d+(\.\d+)?/);
+    if (matched) {
+      const parsed = Number(matched[0]);
+      return Number.isNaN(parsed) ? null : parsed;
+    }
+  }
+
+  return null;
+}
+
+function flattenEntries(value, parentKey = '', entries = []) {
+  if (value === null || value === undefined) {
+    return entries;
+  }
+
+  if (Array.isArray(value)) {
+    value.forEach((item, index) => flattenEntries(item, `${parentKey}.${index}`, entries));
+    return entries;
+  }
+
+  if (typeof value === 'object') {
+    Object.entries(value).forEach(([key, item]) => {
+      const path = parentKey ? `${parentKey}.${key}` : key;
+      flattenEntries(item, path, entries);
+    });
+    return entries;
+  }
+
+  entries.push([parentKey.toLowerCase(), value]);
+  return entries;
+}
+
+function findNumericField(source, patterns) {
+  const entries = flattenEntries(source);
+  const normalizedPatterns = patterns.map((pattern) => pattern.toLowerCase());
+
+  for (const [key, value] of entries) {
+    const numericValue = extractNumericValue(value);
+    if (numericValue === null) {
+      continue;
+    }
+
+    if (normalizedPatterns.some((pattern) => key.includes(pattern))) {
+      return numericValue;
+    }
+  }
+
+  return null;
+}
+
+function buildOptimizePayload({ hour, month, isWeekend }) {
+  const loadTons = 500;
+  const wetBulbC = 20;
+  const currentSetpointC = 7;
+
+  return {
+    total_building_load: round(loadTons, 1),
+    avg_chilled_water_rate: clamp(round(Math.max(50, loadTons / 20), 1), 50, 200),
+    avg_cooling_water_temp: clamp(round(currentSetpointC + 1, 1), 5, 35),
+    avg_outside_temp: clamp(Math.max(32, round(wetBulbC * 1.5 + 12, 1)), 32, 60),
+    avg_dew_point: clamp(Math.max(20, round(wetBulbC + 2, 1)), 20, 40),
+    avg_humidity: 65,
+    avg_wind_speed: 5,
+    avg_pressure: 30,
+    hour,
+    day_of_week: isWeekend ? 0 : 1,
+    month,
+    day_of_year: clamp(Math.max(1, Math.round((month - 1) * 30 + 15)), 1, 365),
+  };
+}
+
 function isCacheValid(cache) {
   return cache.data !== null && (Date.now() - cache.timestamp) < CACHE_TTL_MS;
 }
@@ -20,11 +110,16 @@ export async function fetchPlantData() {
     const hour = now.getHours();
     const month = now.getMonth() + 1;
     const isWeekend = now.getDay() === 0 || now.getDay() === 6 ? 1 : 0;
+    const payload = buildOptimizePayload({ hour, month, isWeekend });
 
-    const response = await fetch(
-      `${OPTIMIZER_URL}/predict?load_tons=500&wet_bulb_c=20&current_chw_setpoint_c=7&current_limit_pct=80&hour=${hour}&month=${month}&is_weekend=${isWeekend}&chillers_running=2`,
-      { signal: AbortSignal.timeout(10000) }
-    );
+    const response = await fetch(`${OPTIMIZER_URL}/optimize`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(payload),
+      signal: AbortSignal.timeout(10000),
+    });
 
     if (!response.ok) throw new Error(`Optimizer API returned ${response.status}`);
 
@@ -33,17 +128,17 @@ export async function fetchPlantData() {
     const plantData = {
       source: 'api',
       capturedAt: new Date().toISOString(),
-      currentEfficiency: result.currentEfficiency ?? result.current_efficiency ?? null,
-      optimalEfficiency: result.optimalEfficiency ?? result.optimal_efficiency ?? null,
-      recommendedSetpoint: result.recommendedSetpoint ?? result.recommended_setpoint ?? null,
-      improvementPercent: result.improvementPercent ?? result.improvement_percent ?? null,
-      energySavingsKwh: result.energySavingsKwh ?? result.energy_savings_kwh ?? null,
-      costSavingsUsd: result.costSavingsUsd ?? result.cost_savings_usd ?? null,
-      operatorAction: result.operatorAction ?? result.operator_action ?? null,
-      outdoorTemp: result.outdoor_temp ?? null,
-      loadTons: result.load_tons ?? null,
-      wetBulb: result.wet_bulb_c ?? null,
-      chillersRunning: result.chillers_running ?? null,
+      currentEfficiency: findNumericField(result, ['current_kw_per_tr', 'current_efficiency', 'kw_per_tr']),
+      optimalEfficiency: findNumericField(result, ['optimal_kw_per_tr', 'optimal_efficiency']),
+      recommendedSetpoint: findNumericField(result, ['recommended_setpoint', 'recommended_chw_setpoint', 'summary.recommended_setpoint']),
+      improvementPercent: findNumericField(result, ['efficiency_improvement_pct', 'improvement_percent', 'potential_savings', 'summary.potential_savings']),
+      energySavingsKwh: findNumericField(result, ['energy_savings_kwh', 'savings_kwh']),
+      costSavingsUsd: findNumericField(result, ['cost_savings_usd', 'cost_savings', 'savings_usd']),
+      operatorAction: Array.isArray(result.recommendations) && result.recommendations.length > 0 ? result.recommendations.join(' ') : null,
+      outdoorTemp: payload.avg_outside_temp,
+      loadTons: payload.total_building_load,
+      wetBulb: 20,
+      chillersRunning: 2,
     };
 
     plantCache = { data: plantData, timestamp: Date.now() };
