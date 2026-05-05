@@ -168,13 +168,14 @@ export function buildPredictionInput(
   limit: number,
   chillers: number[]
 ): PredictionInput {
-  const avgOutsideTemp = clamp(Math.max(32, round(wetBulb * 1.5 + 12, 1)), 32, 60);
-  const avgDewPoint = clamp(Math.max(20, round(wetBulb + 2, 1)), 20, 40);
-  const avgChilledWaterRate = clamp(round(Math.max(50, load / 20), 1), 50, 200);
-  const avgCoolingWaterTemp = clamp(round(setpoint + 1, 1), 5, 35);
-  const avgHumidity = clamp(60, 20, 100);
-  const avgWindSpeed = clamp(5, 0, 30);
-  const avgPressure = 30;
+  const activeChillers = Math.max(chillers.length, 1);
+  const avgOutsideTemp = clamp(round(wetBulb * 1.5 + 52, 1), 40, 120);
+  const avgDewPoint = clamp(round(wetBulb * 1.35 + 35, 1), 20, 90);
+  const avgChilledWaterRate = clamp(round(load / activeChillers, 1), 50, 400);
+  const avgCoolingWaterTemp = clamp(round(setpoint + 19, 1), 20, 40);
+  const avgHumidity = clamp(round(72 - (avgOutsideTemp - avgDewPoint) * 0.6, 1), 20, 100);
+  const avgWindSpeed = clamp(round(6 + activeChillers * 1.2, 1), 0, 30);
+  const avgPressure = 29.92;
   const dayOfWeek = weekend ? 0 : 1;
   const dayOfYear = clamp(Math.max(1, Math.round((month - 1) * 30 + 15)), 1, 365);
 
@@ -275,6 +276,14 @@ export async function predictKwPerTr(inputs: PredictionInput): Promise<number | 
   return null;
 }
 
+export function formatChillerStageLabel(chillers: number[]): string {
+  if (!chillers.length) {
+    return 'None';
+  }
+
+  return chillers.join(', ');
+}
+
 function calculateStageAdjustedTotalPower(load: number, kwPerTr: number, chillers: number[]): number {
   const activeChillers = Math.max(chillers.length, 1);
   const basePower = load * kwPerTr;
@@ -363,42 +372,8 @@ export async function calculateSavings(
     limit,
     normalizedCurrentChillers,
   );
-  const response = await fetchOptimizerResponse(currentInputs, 'optimize');
-
-  if (!response) {
-    return null;
-  }
-
-  const currentKwPerTr = findNumericField(response, [
-    'current_kw_per_tr',
-    'kw_per_tr',
-    'current_efficiency',
-    'efficiency',
-  ]);
-
-  const optimalKwPerTr = findNumericField(response, [
-    'optimal_kw_per_tr',
-    'optimal_efficiency',
-    'recommended_efficiency',
-    'summary.optimal_efficiency',
-    'efficiency',
-  ]);
-
-  const recommendedSetpoint = findNumericField(response, [
-    'recommended_setpoint',
-    'recommended_chw_setpoint',
-    'optimal_chw_setpoint',
-    'summary.recommended_setpoint',
-  ]) ?? currentSetpoint;
-
-  const improvementPercentFromApi = findNumericField(response, [
-    'efficiency_improvement_pct',
-    'improvement_pct',
-    'potential_savings',
-    'summary.potential_savings',
-  ]);
-
-  if (currentKwPerTr === null || optimalKwPerTr === null) {
+  const currentKwPerTr = await predictKwPerTr(currentInputs);
+  if (currentKwPerTr === null) {
     return null;
   }
 
@@ -410,35 +385,26 @@ export async function calculateSavings(
     totalPower: currentTotalPower,
   };
 
-  const optimalConfigFromSearch =
-    (await findOptimalConfiguration(
-      load,
-      wetBulb,
-      hour,
-      month,
-      weekend,
-      limit,
-      normalizedCurrentChillers,
-      round(recommendedSetpoint, 1),
-    )) || null;
-
-  const fallbackOptimalConfig: OptimalConfiguration = {
-    chillers: normalizedCurrentChillers,
-    setpoint: round(recommendedSetpoint, 1),
-    kwPerTr: optimalKwPerTr,
-    totalPower: calculateStageAdjustedTotalPower(load, optimalKwPerTr, normalizedCurrentChillers),
-  };
-
-  const optimalConfig = optimalConfigFromSearch ?? fallbackOptimalConfig;
+  const optimalConfig = await findOptimalConfiguration(
+    load,
+    wetBulb,
+    hour,
+    month,
+    weekend,
+    limit,
+    normalizedCurrentChillers,
+    currentSetpoint,
+  );
+  if (!optimalConfig) {
+    return null;
+  }
 
   const effectiveOptimalPower = optimalConfig.totalPower;
   const effectivePowerSaved = round(currentTotalPower - effectiveOptimalPower, 1);
   const improvementPercent =
-    improvementPercentFromApi !== null
-      ? round(improvementPercentFromApi, 1)
-      : currentTotalPower > 0
-        ? round((effectivePowerSaved / currentTotalPower) * 100, 1)
-        : 0;
+    currentTotalPower > 0
+      ? round((effectivePowerSaved / currentTotalPower) * 100, 1)
+      : 0;
 
   return {
     currentConfig,

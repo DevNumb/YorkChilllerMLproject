@@ -1,5 +1,5 @@
 import React from 'react';
-import { getHistory } from '../../services/maintenanceDatabase';
+import { getHistory } from '../../services/supabaseMaintenanceService';
 
 export default function ExportButton({ tasks }) {
   const exportCSV = async () => {

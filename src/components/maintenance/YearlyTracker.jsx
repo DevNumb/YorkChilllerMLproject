@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { getYearlyStats } from '../../services/maintenanceDatabase';
+import { getYearlyStats } from '../../services/supabaseMaintenanceService';
 
 function getMonthName(month) {
   return ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][month - 1] || '';

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { buildAssistantContext } from '../services/assistantContext';
-import { buildDashboardPredictionInput, calculateSavings } from '../services/chillerOptimizer';
+import { calculateSavings, formatChillerStageLabel } from '../services/chillerOptimizer';
 
 const OPTIMIZER_URL =
   import.meta.env.VITE_OPTIMIZER_URL || 'https://DevNumb-MLYorkchillerOptimzer.hf.space';
@@ -536,6 +536,55 @@ export default function Dashboard() {
     setError('');
 
     try {
+      const savings = await calculateSavings(
+        inputs.load_tons,
+        inputs.wet_bulb_c,
+        inputs.hour,
+        inputs.month,
+        inputs.is_weekend,
+        inputs.current_limit_pct,
+        [inputs.chillers_running],
+        inputs.current_chw_setpoint_c,
+      );
+
+      if (savings) {
+        const metrics = {
+          currentEfficiency: savings.currentConfig.kwPerTr,
+          optimalEfficiency: savings.optimalConfig.kwPerTr,
+          currentTotalPower: savings.currentConfig.totalPower,
+          optimalTotalPower: savings.optimalConfig.totalPower,
+          powerSaved: savings.powerSaved,
+          improvementPercent: savings.improvementPercent,
+          recommendedSetpoint: savings.optimalConfig.setpoint,
+          recommendedChillers: savings.optimalConfig.chillers.length,
+          recommendedChillerList: savings.optimalConfig.chillers,
+          energySavingsKwh: savings.powerSaved,
+          costSavingsUsd: savings.costSavingsPerHour,
+          co2ReductionKg: savings.co2ReductionPerHour,
+          costSavingsPerHour: savings.costSavingsPerHour,
+          co2ReductionPerHour: savings.co2ReductionPerHour,
+          currentConfig: savings.currentConfig,
+          optimalConfig: savings.optimalConfig,
+          operatorAction:
+            savings.optimalConfig.chillers.length !== inputs.chillers_running
+              ? `Stage chillers ${formatChillerStageLabel(savings.optimalConfig.chillers)} and set CHW setpoint to ${savings.optimalConfig.setpoint.toFixed(1)}°C on the OptiView panel.`
+              : buildOperatorAction(inputs.current_chw_setpoint_c, savings.optimalConfig.setpoint),
+        };
+
+        const entry = {
+          id: crypto.randomUUID(),
+          timestamp: new Date().toISOString(),
+          inputs: { ...inputs },
+          result: metrics,
+        };
+
+        setResult(entry);
+        setHistory((current) => [entry, ...current].slice(0, 10));
+        setChillerOptimization(savings);
+        setOptimizationHistory((current) => [entry, ...current].slice(0, 20));
+        return;
+      }
+
       // Build the 12-field input for API prediction
       const avgOutsideTemp = Math.max(32, inputs.wet_bulb_c * 1.5 + 12);
       const avgDewPoint = Math.max(20, inputs.wet_bulb_c + 2);

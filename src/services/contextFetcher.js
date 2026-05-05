@@ -1,7 +1,7 @@
 const OPTIMIZER_URL = import.meta.env.VITE_OPTIMIZER_URL || 'https://DevNumb-MLYorkchillerOptimzer.hf.space';
 const CACHE_TTL_MS = 30_000;
 
-import { getAllTasks, getHistory } from './maintenanceDatabase.js';
+import { getAllTasks, getHistory } from './supabaseMaintenanceService.js';
 
 let plantCache = { data: null, timestamp: 0 };
 let maintenanceCache = { data: null, timestamp: 0 };

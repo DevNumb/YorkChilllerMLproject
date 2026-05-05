@@ -13,7 +13,7 @@ import {
   getHistory,
   refreshTaskStatuses,
   addNewTask,
-} from '../services/maintenanceDatabase';
+} from '../services/supabaseMaintenanceService';
 
 const ORIGINAL_TASKS = [
   { id: 1, label: 'Clean condenser', status: 'Due Soon' },
