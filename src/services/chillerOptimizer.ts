@@ -372,6 +372,33 @@ export async function calculateSavings(
     limit,
     normalizedCurrentChillers,
   );
+
+  // Try to use the /optimize endpoint first
+  const optimizeResult = await fetchOptimizerResponse(currentInputs, 'optimize');
+  
+  if (optimizeResult && optimizeResult.optimal_setpoint !== undefined) {
+    // Map backend response to our SavingsResult interface
+    return {
+      currentConfig: {
+        chillers: normalizedCurrentChillers,
+        setpoint: currentSetpoint,
+        kwPerTr: optimizeResult.current_kw_per_tr || 0.6,
+        totalPower: round(load * (optimizeResult.current_kw_per_tr || 0.6), 1),
+      },
+      optimalConfig: {
+        chillers: optimizeResult.optimal_chillers || normalizedCurrentChillers,
+        setpoint: optimizeResult.optimal_setpoint,
+        kwPerTr: optimizeResult.optimal_kw_per_tr,
+        totalPower: optimizeResult.optimal_total_power,
+      },
+      powerSaved: optimizeResult.energy_savings_kwh,
+      improvementPercent: optimizeResult.improvement_pct,
+      costSavingsPerHour: optimizeResult.cost_savings_usd,
+      co2ReductionPerHour: optimizeResult.co2_reduction_kg,
+    };
+  }
+
+  // Fallback to local optimization if /optimize fails
   const currentKwPerTr = await predictKwPerTr(currentInputs);
   if (currentKwPerTr === null) {
     return null;

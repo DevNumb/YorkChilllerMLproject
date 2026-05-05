@@ -547,169 +547,31 @@ export default function Dashboard() {
         inputs.current_chw_setpoint_c,
       );
 
-      if (savings) {
-        const metrics = {
-          currentEfficiency: savings.currentConfig.kwPerTr,
-          optimalEfficiency: savings.optimalConfig.kwPerTr,
-          currentTotalPower: savings.currentConfig.totalPower,
-          optimalTotalPower: savings.optimalConfig.totalPower,
-          powerSaved: savings.powerSaved,
-          improvementPercent: savings.improvementPercent,
-          recommendedSetpoint: savings.optimalConfig.setpoint,
-          recommendedChillers: savings.optimalConfig.chillers.length,
-          recommendedChillerList: savings.optimalConfig.chillers,
-          energySavingsKwh: savings.powerSaved,
-          costSavingsUsd: savings.costSavingsPerHour,
-          co2ReductionKg: savings.co2ReductionPerHour,
-          costSavingsPerHour: savings.costSavingsPerHour,
-          co2ReductionPerHour: savings.co2ReductionPerHour,
-          currentConfig: savings.currentConfig,
-          optimalConfig: savings.optimalConfig,
-          operatorAction:
-            savings.optimalConfig.chillers.length !== inputs.chillers_running
-              ? `Stage chillers ${formatChillerStageLabel(savings.optimalConfig.chillers)} and set CHW setpoint to ${savings.optimalConfig.setpoint.toFixed(1)}°C on the OptiView panel.`
-              : buildOperatorAction(inputs.current_chw_setpoint_c, savings.optimalConfig.setpoint),
-        };
-
-        const entry = {
-          id: crypto.randomUUID(),
-          timestamp: new Date().toISOString(),
-          inputs: { ...inputs },
-          result: metrics,
-        };
-
-        setResult(entry);
-        setHistory((current) => [entry, ...current].slice(0, 10));
-        setChillerOptimization(savings);
-        setOptimizationHistory((current) => [entry, ...current].slice(0, 20));
-        return;
+      if (!savings) {
+        throw new Error('Optimization engine returned no results. Please check your inputs and API connection.');
       }
-
-      // Build the 12-field input for API prediction
-      const avgOutsideTemp = Math.max(32, inputs.wet_bulb_c * 1.5 + 12);
-      const avgDewPoint = Math.max(20, inputs.wet_bulb_c + 2);
-      const avgChilledWaterRate = Math.max(50, inputs.load_tons / 20);
-      const avgCoolingWaterTemp = inputs.current_chw_setpoint_c + 1;
-      const avgHumidity = 60;
-      const avgWindSpeed = 5;
-      const avgPressure = 30;
-      const dayOfWeek = inputs.is_weekend ? 0 : 1;
-      const dayOfYear = Math.round((inputs.month - 1) * 30 + 15);
-
-      // Current configuration prediction
-      const currentInputs = {
-        total_building_load: inputs.load_tons,
-        avg_chilled_water_rate: avgChilledWaterRate,
-        avg_cooling_water_temp: avgCoolingWaterTemp,
-        avg_outside_temp: avgOutsideTemp,
-        avg_dew_point: avgDewPoint,
-        avg_humidity: avgHumidity,
-        avg_wind_speed: avgWindSpeed,
-        avg_pressure: avgPressure,
-        hour: inputs.hour,
-        day_of_week: dayOfWeek,
-        month: inputs.month,
-        day_of_year: dayOfYear,
-      };
-
-      // Get current efficiency
-      const currentResponse = await fetch(`${OPTIMIZER_URL}/predict`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(currentInputs),
-      });
-
-      if (!currentResponse.ok) {
-        throw new Error(`API error: ${currentResponse.status}`);
-      }
-
-      const currentData = await currentResponse.json();
-      const currentKwPerTr = currentData.kw_per_tr || 0.6;
-      const currentTotalPower = inputs.load_tons * currentKwPerTr;
-      const currentEfficiency = 1 / (currentKwPerTr / 0.6);
-
-      // Optimize: try different setpoints and chiller counts
-      const setpoints = [5.0, 5.5, 6.0, 6.5, 7.0, 7.5, 8.0, 8.5, 9.0, 9.5, 10.0];
-      const chillerCounts = [1, 2, 3, 4];
-      let bestConfig = null;
-      let bestTotalPower = currentTotalPower;
-      const optimizationResults = [];
-
-      for (const setpoint of setpoints) {
-        for (const count of chillerCounts) {
-          const testInput = {
-            ...currentInputs,
-            avg_cooling_water_temp: setpoint + 1,
-          };
-
-          try {
-            const testResponse = await fetch(`${OPTIMIZER_URL}/predict`, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify(testInput),
-            });
-
-            if (testResponse.ok) {
-              const testData = await testResponse.json();
-              const testKwPerTr = testData.kw_per_tr || currentKwPerTr;
-              const loadPerChiller = inputs.load_tons / count;
-              const stageFactor = 1 + (Math.abs(loadPerChiller - 500) / 500) * 0.1;
-              const testTotalPower = inputs.load_tons * testKwPerTr * stageFactor;
-
-              const improvement = ((currentTotalPower - testTotalPower) / currentTotalPower) * 100;
-              optimizationResults.push({
-                setpoint,
-                chillers: count,
-                kwPerTr: testKwPerTr,
-                totalPower: testTotalPower,
-                improvement,
-              });
-
-              if (testTotalPower < bestTotalPower) {
-                bestTotalPower = testTotalPower;
-                bestConfig = {
-                  setpoint,
-                  chillers: count,
-                  kwPerTr: testKwPerTr,
-                  totalPower: testTotalPower,
-                  improvement,
-                };
-              }
-            }
-          } catch (e) {
-            // Skip failed combinations
-            continue;
-          }
-        }
-      }
-
-      if (!bestConfig) {
-        throw new Error('No valid optimization configurations found');
-      }
-
-      const optimalTotalPower = bestConfig.totalPower;
-      const optimalKwPerTr = bestConfig.kwPerTr;
-      const optimalEfficiency = 1 / (optimalKwPerTr / 0.6);
-      const powerSaved = currentTotalPower - optimalTotalPower;
-      const costSavingsPerHour = powerSaved * 0.12;
-      const co2ReductionPerHour = powerSaved * 0.42;
 
       const metrics = {
-        currentEfficiency: Math.round(currentKwPerTr * 1000) / 1000,
-        optimalEfficiency: Math.round(optimalKwPerTr * 1000) / 1000,
-        currentTotalPower: Math.round(currentTotalPower * 10) / 10,
-        optimalTotalPower: Math.round(optimalTotalPower * 10) / 10,
-        powerSaved: Math.round(powerSaved * 10) / 10,
-        improvementPercent: Math.round(bestConfig.improvement * 10) / 10,
-        optimalSetpoint: bestConfig.setpoint,
-        recommendedChillers: bestConfig.chillers,
-        costSavingsPerHour: Math.round(costSavingsPerHour * 100) / 100,
-        co2ReductionPerHour: Math.round(co2ReductionPerHour * 10) / 10,
+        currentEfficiency: savings.currentConfig.kwPerTr,
+        optimalEfficiency: savings.optimalConfig.kwPerTr,
+        currentTotalPower: savings.currentConfig.totalPower,
+        optimalTotalPower: savings.optimalConfig.totalPower,
+        powerSaved: savings.powerSaved,
+        improvementPercent: savings.improvementPercent,
+        recommendedSetpoint: savings.optimalConfig.setpoint,
+        recommendedChillers: savings.optimalConfig.chillers.length,
+        recommendedChillerList: savings.optimalConfig.chillers,
+        energySavingsKwh: savings.powerSaved,
+        costSavingsUsd: savings.costSavingsPerHour,
+        co2ReductionKg: savings.co2ReductionPerHour,
+        costSavingsPerHour: savings.costSavingsPerHour,
+        co2ReductionPerHour: savings.co2ReductionPerHour,
+        currentConfig: savings.currentConfig,
+        optimalConfig: savings.optimalConfig,
         operatorAction:
-          bestConfig.chillers !== inputs.chillers_running
-            ? `Switch to ${bestConfig.chillers} chiller(s) and set CHW setpoint to ${bestConfig.setpoint}°C`
-            : `Adjust CHW setpoint to ${bestConfig.setpoint}°C on the OptiView panel`,
-        allConfigurations: optimizationResults.sort((a, b) => b.improvement - a.improvement).slice(0, 5),
+          savings.optimalConfig.chillers.length !== inputs.chillers_running
+            ? `Stage chillers ${formatChillerStageLabel(savings.optimalConfig.chillers)} and set CHW setpoint to ${savings.optimalConfig.setpoint.toFixed(1)}°C on the OptiView panel.`
+            : buildOperatorAction(inputs.current_chw_setpoint_c, savings.optimalConfig.setpoint),
       };
 
       const entry = {
@@ -721,7 +583,7 @@ export default function Dashboard() {
 
       setResult(entry);
       setHistory((current) => [entry, ...current].slice(0, 10));
-      setChillerOptimization(metrics);
+      setChillerOptimization(savings);
       setOptimizationHistory((current) => [entry, ...current].slice(0, 20));
     } catch (requestError) {
       console.error('Optimization error:', requestError);
@@ -729,7 +591,7 @@ export default function Dashboard() {
 
       if (lastRecommendation) {
         setResult(lastRecommendation);
-        setError('API error. Showing last successful recommendation.');
+        setError(`API error: ${requestError.message}. Showing last successful recommendation.`);
       } else {
         setError(`Optimization failed: ${requestError.message}. Check API connection and input values.`);
       }
