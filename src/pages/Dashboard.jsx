@@ -1,9 +1,9 @@
 import { useEffect, useMemo, useState } from 'react';
 import { buildAssistantContext } from '../services/assistantContext';
 import { calculateSavings, formatChillerStageLabel } from '../services/chillerOptimizer';
+import { saveOptimizationHistory, getOptimizationHistory } from '../services/supabaseDashboardService';
 
-const OPTIMIZER_URL =
-  import.meta.env.VITE_OPTIMIZER_URL || 'https://DevNumb-MLYorkchillerOptimzer.hf.space';
+const OPTIMIZER_URL = 'https://DevNumb-MLYorkchillerOptimzer.hf.space';
 const WEATHER_URL = import.meta.env.VITE_WEATHER_URL || 'https://api.open-meteo.com/v1/forecast';
 const HISTORY_KEY = 'chiller-optimizer-history-v1';
 const DASHBOARD_CONTEXT_KEY = 'chiller-dashboard-context-v1';
@@ -228,11 +228,23 @@ function findTextField(source, patterns) {
   return '';
 }
 
-function buildOperatorAction(currentSetpoint, recommendedSetpoint) {
+function buildOperatorAction(currentSetpoint, recommendedSetpoint, currentTotalPower, optimalTotalPower) {
   const direction = recommendedSetpoint > currentSetpoint ? 'Raise' : 'Lower';
+  const powerSaved = round(currentTotalPower - optimalTotalPower, 1);
   return `${direction} the CHW setpoint from ${currentSetpoint.toFixed(1)}°C to ${recommendedSetpoint.toFixed(
     1,
-  )}°C on the OptiView panel, then monitor kW/ton and approach temperature for 15 minutes.`;
+  )}°C on the OptiView panel to reduce total power from ${currentTotalPower.toFixed(0)} kW to ${optimalTotalPower.toFixed(
+    0,
+  )} kW (${powerSaved.toFixed(1)} kW saved). Monitor the system for 15 minutes.`;
+}
+
+function buildStagingAction(chillers, recommendedSetpoint, currentTotalPower, optimalTotalPower) {
+  const powerSaved = round(currentTotalPower - optimalTotalPower, 1);
+  return `Stage chillers ${formatChillerStageLabel(chillers)} and set CHW setpoint to ${recommendedSetpoint.toFixed(
+    1,
+  )}°C on the OptiView panel to reduce total power from ${currentTotalPower.toFixed(0)} kW to ${optimalTotalPower.toFixed(
+    0,
+  )} kW (${powerSaved.toFixed(1)} kW saved).`;
 }
 
 function formatCurrency(value) {
@@ -360,6 +372,29 @@ export default function Dashboard() {
     return () => window.clearInterval(timer);
   }, []);
 
+  // Load optimization history from Supabase on mount
+  useEffect(() => {
+    async function loadDatabaseHistory() {
+      try {
+        const dbHistory = await getOptimizationHistory(20);
+        if (dbHistory && dbHistory.length > 0) {
+          setHistory(dbHistory);
+          setOptimizationHistory(dbHistory);
+          console.log('[Dashboard] Loaded', dbHistory.length, 'recommendations from database');
+        }
+      } catch (err) {
+        console.warn('[Dashboard] Failed to load history from database:', err.message);
+        // Fall back to localStorage if database fails
+        const localHistory = readHistory();
+        if (localHistory.length > 0) {
+          setHistory(localHistory);
+          setOptimizationHistory(localHistory);
+        }
+      }
+    }
+    loadDatabaseHistory();
+  }, []);
+
   useEffect(() => {
     window.localStorage.setItem(HISTORY_KEY, JSON.stringify(history.slice(0, 10)));
   }, [history]);
@@ -483,7 +518,7 @@ export default function Dashboard() {
         currentEfficiencyKwPerTon: entry.result?.currentEfficiency ?? null,
         optimalEfficiencyKwPerTon: entry.result?.optimalEfficiency ?? null,
         improvementPercent: entry.result?.improvementPercent ?? null,
-        energySavingsKwh: entry.result?.energySavingsKwh ?? null,
+        powerSavedKw: entry.result?.powerSavedKw ?? null,
         costSavingsUsd: entry.result?.costSavingsUsd ?? null,
         co2ReductionKg: entry.result?.co2ReductionKg ?? null,
         recommendedSetpointC: entry.result?.recommendedSetpoint ?? null,
@@ -557,11 +592,12 @@ export default function Dashboard() {
         currentTotalPower: savings.currentConfig.totalPower,
         optimalTotalPower: savings.optimalConfig.totalPower,
         powerSaved: savings.powerSaved,
+        powerSavedKw: savings.powerSaved,
+        energySavingsKwh: savings.powerSaved,
         improvementPercent: savings.improvementPercent,
         recommendedSetpoint: savings.optimalConfig.setpoint,
         recommendedChillers: savings.optimalConfig.chillers.length,
         recommendedChillerList: savings.optimalConfig.chillers,
-        energySavingsKwh: savings.powerSaved,
         costSavingsUsd: savings.costSavingsPerHour,
         co2ReductionKg: savings.co2ReductionPerHour,
         costSavingsPerHour: savings.costSavingsPerHour,
@@ -570,8 +606,18 @@ export default function Dashboard() {
         optimalConfig: savings.optimalConfig,
         operatorAction:
           savings.optimalConfig.chillers.length !== inputs.chillers_running
-            ? `Stage chillers ${formatChillerStageLabel(savings.optimalConfig.chillers)} and set CHW setpoint to ${savings.optimalConfig.setpoint.toFixed(1)}°C on the OptiView panel.`
-            : buildOperatorAction(inputs.current_chw_setpoint_c, savings.optimalConfig.setpoint),
+            ? buildStagingAction(
+                savings.optimalConfig.chillers,
+                savings.optimalConfig.setpoint,
+                savings.currentConfig.totalPower,
+                savings.optimalConfig.totalPower,
+              )
+            : buildOperatorAction(
+                inputs.current_chw_setpoint_c,
+                savings.optimalConfig.setpoint,
+                savings.currentConfig.totalPower,
+                savings.optimalConfig.totalPower,
+              ),
       };
 
       const entry = {
@@ -585,6 +631,20 @@ export default function Dashboard() {
       setHistory((current) => [entry, ...current].slice(0, 10));
       setChillerOptimization(savings);
       setOptimizationHistory((current) => [entry, ...current].slice(0, 20));
+
+      // Save to Supabase
+      try {
+        await saveOptimizationHistory(entry);
+        console.log('[Dashboard] ✓ Optimization saved to database');
+      } catch (dbError) {
+        console.error('[Dashboard] ✗ Failed to save to database:', {
+          message: dbError.message,
+          code: dbError.code,
+          details: dbError.details,
+          hint: dbError.hint,
+        });
+        // Don't fail the optimization if database save fails
+      }
     } catch (requestError) {
       console.error('Optimization error:', requestError);
       const lastRecommendation = history[0];
@@ -634,7 +694,7 @@ export default function Dashboard() {
       'current_efficiency_kw_per_ton',
       'optimal_efficiency_kw_per_ton',
       'improvement_percent',
-      'energy_savings_kwh',
+      'power_saved_kw',
       'cost_savings_usd',
       'co2_reduction_kg',
       'recommended_setpoint_c',
@@ -653,7 +713,7 @@ export default function Dashboard() {
       item.result.currentEfficiency,
       item.result.optimalEfficiency,
       item.result.improvementPercent,
-      item.result.energySavingsKwh,
+      item.result.powerSavedKw,
       item.result.costSavingsUsd,
       item.result.co2ReductionKg,
       item.result.recommendedSetpoint,
@@ -1001,6 +1061,18 @@ function SystemStatusCard({ chillersRunning, efficiency, faultCount }) {
 
                   <div className="metrics-grid">
                     <MetricCard
+                      label="Current Total Power"
+                      value={`${result.result.currentTotalPower.toFixed(0)} kW`}
+                      hint="Total plant power draw"
+                      accent="#ff6b7d"
+                    />
+                    <MetricCard
+                      label="Optimal Total Power"
+                      value={`${result.result.optimalTotalPower.toFixed(0)} kW`}
+                      hint="Total draw if optimized"
+                      accent="#4be4a4"
+                    />
+                    <MetricCard
                       label="Optimal Efficiency"
                       value={`${result.result.optimalEfficiency.toFixed(3)} kW/ton`}
                       hint="Predicted optimized condition"
@@ -1013,8 +1085,8 @@ function SystemStatusCard({ chillersRunning, efficiency, faultCount }) {
                       accent="#53f2a8"
                     />
                     <MetricCard
-                      label="Energy Savings"
-                      value={`${result.result.energySavingsKwh.toFixed(1)} kWh`}
+                      label="Power Savings"
+                      value={`${result.result.powerSavedKw.toFixed(1)} kW`}
                       hint={formatCurrency(result.result.costSavingsUsd)}
                       accent="#7fe6ff"
                     />
@@ -1029,14 +1101,25 @@ function SystemStatusCard({ chillersRunning, efficiency, faultCount }) {
 
                 <div className="recommendation-banner">
                   <div>
-                    <p className="section-label">Recommended CHW Setpoint</p>
+                    <p className="section-label">Recommended Configuration</p>
                     <h3>
-                      {result.inputs.current_chw_setpoint_c.toFixed(1)}°C → {result.result.recommendedSetpoint.toFixed(1)}°C
+                      {result.result.recommendedChillers} chillers @ {result.result.recommendedSetpoint.toFixed(1)}°C
                     </h3>
+                    <small style={{ color: '#7fe6ff', marginTop: '0.5rem', display: 'block' }}>
+                      Current: {result.inputs.chillers_running} chillers @ {result.inputs.current_chw_setpoint_c.toFixed(1)}°C
+                    </small>
                   </div>
-                  <button type="button" className="secondary-button" onClick={() => window.print()}>
-                    Export as PDF
-                  </button>
+                  <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center' }}>
+                    <div style={{ textAlign: 'right' }}>
+                      <p style={{ fontSize: '0.875rem', color: '#a0aec0', margin: '0 0 0.25rem 0' }}>Energy Savings</p>
+                      <strong style={{ fontSize: '1.5rem', color: '#53f2a8' }}>
+                        {result.result.powerSavedKw.toFixed(1)} kW
+                      </strong>
+                    </div>
+                    <button type="button" className="secondary-button" onClick={() => window.print()}>
+                      Export as PDF
+                    </button>
+                  </div>
                 </div>
 
                 <div className="action-card">
@@ -1175,8 +1258,8 @@ function SystemStatusCard({ chillersRunning, efficiency, faultCount }) {
           <section className="glass-card panel-stack history-panel">
             <div className="section-title-row">
               <div>
-                <p className="section-label">Local History</p>
-                <h2>Last 10 Recommendations</h2>
+                <p className="section-label">Optimization History</p>
+                <h2>Last 20 Recommendations</h2>
               </div>
               <div className="button-row">
                 <button type="button" className="secondary-button" onClick={exportCsv} disabled={!history.length}>
@@ -1195,14 +1278,16 @@ function SystemStatusCard({ chillersRunning, efficiency, faultCount }) {
                     <div>
                       <strong>{formatTimestamp(item.timestamp)}</strong>
                       <span>
-                        Load {item.inputs.load_tons} tons · {item.inputs.chillers_running} chillers
+                        Load {item.inputs.load_tons} tons · {item.inputs.chillers_running} → {item.result.recommendedChillers} chillers
                       </span>
                     </div>
                     <div className="history-metrics">
                       <span>
                         {item.result.currentEfficiency.toFixed(3)} → {item.result.optimalEfficiency.toFixed(3)} kW/ton
                       </span>
-                      <strong>{item.result.improvementPercent.toFixed(1)}% savings</strong>
+                      <strong style={{ color: item.result.powerSavedKw > 0 ? '#53f2a8' : '#a0aec0' }}>
+                        {item.result.powerSavedKw.toFixed(1)} kW saved
+                      </strong>
                     </div>
                   </button>
                 ))}
@@ -1210,7 +1295,7 @@ function SystemStatusCard({ chillersRunning, efficiency, faultCount }) {
             ) : (
               <div className="empty-state">
                 <p>History is empty.</p>
-                <span>Completed recommendations will be stored in this browser.</span>
+                <span>Completed recommendations will be stored in the database and displayed here.</span>
               </div>
             )}
           </section>

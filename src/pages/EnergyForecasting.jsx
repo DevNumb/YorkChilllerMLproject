@@ -153,11 +153,14 @@ export default function EnergyForecasting() {
       const setpointUsage = {};
 
       for (let hour = 0; hour < 24; hour++) {
-        const load = 800 + 300 * Math.sin(hour / 6);
-        const wetBulb = 18 + 8 * Math.sin(hour / 8);
-        const baselineChillers = load < 600 ? 1 : load < 900 ? 2 : load < 1200 ? 3 : 4;
+        // Realistic load and weather profile for tomorrow
+        const load = 800 + 300 * Math.sin((hour - 8) / 6); // Peak load around 2 PM
+        const wetBulb = 18 + 8 * Math.sin((hour - 10) / 8); // Peak wet bulb late afternoon
+        const baselineChillers = load < 600 ? 1 : load < 1000 ? 2 : load < 1400 ? 3 : 4;
+        const baselineSetpoint = 6.5;
 
         try {
+          // Optimized forecast call: less scenarios to be faster
           const savings = await calculateSavings(
             load,
             wetBulb,
@@ -165,8 +168,9 @@ export default function EnergyForecasting() {
             tomorrowMonth,
             isWeekend,
             100,
-            [baselineChillers],
-            6.5,
+            baselineChillers, // Passed as number for correct count
+            baselineSetpoint,
+            true, // fastMode enabled
           );
 
           if (!savings) {
@@ -281,6 +285,10 @@ export default function EnergyForecasting() {
         efficiency: round(1 / (savings.optimalConfig.kwPerTr / 0.6), 2),
         recommendedSetpoint: round(savings.optimalConfig.setpoint, 1),
         recommendedChillers: savings.optimalConfig.chillers.length,
+        powerSaved: round(savings.powerSaved, 1),
+        improvementPercent: round(savings.improvementPercent, 1),
+        costSaved: round(savings.costSavingsPerHour, 2),
+        co2Saved: round(savings.co2ReductionPerHour, 1),
         timestamp: new Date().toISOString(),
       };
 
@@ -424,6 +432,10 @@ export default function EnergyForecasting() {
             <MetricCard label="Efficiency" value={manualOptimization.efficiency} />
             <MetricCard label="Best Setpoint" value={`${manualOptimization.recommendedSetpoint}°C`} />
             <MetricCard label="Recommended Chillers" value={manualOptimization.recommendedChillers} />
+            <MetricCard label="Improvement" value={`${manualOptimization.improvementPercent}%`} accent="#4CAF50" />
+            <MetricCard label="Power Saved" value={`${manualOptimization.powerSaved} kW`} accent="#4CAF50" />
+            <MetricCard label="Cost Saved" value={`$${manualOptimization.costSaved}/hr`} accent="#4CAF50" />
+            <MetricCard label="CO2 Reduced" value={`${manualOptimization.co2Saved} kg/hr`} accent="#4CAF50" />
           </div>
         ) : null}
       </section>
