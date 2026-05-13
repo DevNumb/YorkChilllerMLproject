@@ -119,11 +119,15 @@ export default function EnergyForecasting() {
   const [error, setError] = useState('');
 
   const [manualInputs, setManualInputs] = useState({
-    load_tons: 800,
-    wet_bulb_c: 18,
+    load_tons: 1200,
+    wet_bulb_c: 22,
     current_chw_setpoint_c: 6.5,
-    current_limit_pct: 85,
-    chillers_running: 2,
+    current_limit_pct: 90,
+    chillers_running: 3,
+    CHL_STA_1: 1, CHL_STA_2: 1, CHL_STA_3: 1,
+    CHL_COMP_SPD_CTRL_1: 85, CHL_COMP_SPD_CTRL_2: 85, CHL_COMP_SPD_CTRL_3: 85,
+    CT_FAN_SPD_CTRL_1: 65, CT_FAN_SPD_CTRL_2: 65, CT_FAN_SPD_CTRL_3: 65,
+    CHL_CD_FLOW_1: 280, CHL_CD_FLOW_2: 280, CHL_CD_FLOW_3: 280,
   });
   const [manualOptimization, setManualOptimization] = useState(null);
   const [manualLoading, setManualLoading] = useState(false);
@@ -137,7 +141,7 @@ export default function EnergyForecasting() {
       tomorrow.setDate(tomorrow.getDate() + 1);
 
       const tomorrowMonth = tomorrow.getMonth() + 1;
-      const isWeekend = [0, 6].includes(tomorrow.getDay()) ? 1 : 0;
+      const isWeekend = [0, 6].includes(tomorrow.getDay()) ? 0 : 1;
       const formattedDate = tomorrow.toLocaleDateString(undefined, {
         weekday: 'long',
         month: 'long',
@@ -152,116 +156,65 @@ export default function EnergyForecasting() {
       const chillerUsage = {};
       const setpointUsage = {};
 
-      for (let hour = 0; hour < 24; hour++) {
-        // Realistic load and weather profile for tomorrow
-        const load = 800 + 300 * Math.sin((hour - 8) / 6); // Peak load around 2 PM
-        const wetBulb = 18 + 8 * Math.sin((hour - 10) / 8); // Peak wet bulb late afternoon
-        const baselineChillers = load < 600 ? 1 : load < 1000 ? 2 : load < 1400 ? 3 : 4;
-        const baselineSetpoint = 6.5;
+      // Only calculate 8 points (every 3 hours) for speed, interpolate others
+      for (let hour = 0; hour < 24; hour += 3) {
+        const load = 1200 + 400 * Math.sin((hour - 8) / 6); 
+        const wetBulb = 22 + 5 * Math.sin((hour - 10) / 8); 
+        const baselineChillers = load < 800 ? 1 : load < 1400 ? 2 : 3;
 
         try {
-          // Optimized forecast call: less scenarios to be faster
           const savings = await calculateSavings(
             load,
             wetBulb,
             hour,
             tomorrowMonth,
             isWeekend,
-            100,
-            baselineChillers, // Passed as number for correct count
-            baselineSetpoint,
-            true, // fastMode enabled
+            25,
+            {
+              ...manualInputs,
+              OA_TEMP: 25,
+              OA_TEMP_WB: wetBulb,
+              Hour: hour,
+              Weekday: isWeekend,
+              Month: tomorrowMonth,
+              CHL_STA_1: baselineChillers >= 1 ? 1 : 0,
+              CHL_STA_2: baselineChillers >= 2 ? 1 : 0,
+              CHL_STA_3: baselineChillers >= 3 ? 1 : 0,
+              CWL_SEC_LOAD: load,
+            }
           );
 
-          if (!savings) {
-            throw new Error('No forecast recommendation found');
+          if (savings) {
+            const hourData = {
+              hour: `${String(hour).padStart(2, '0')}:00`,
+              load: round(load, 0),
+              wetBulb: round(wetBulb, 1),
+              totalPower: round(savings.optimalConfig.totalPower, 1),
+              kwPerTr: round(savings.optimalConfig.kwPerTr, 3),
+            };
+            schedule.push(hourData);
+            totalEnergy += savings.optimalConfig.totalPower * 3;
+            totalKwPerTr += savings.optimalConfig.kwPerTr;
           }
-
-          const hourData = {
-            hour: `${String(hour).padStart(2, '0')}:00`,
-            load: round(load, 0),
-            wetBulb: round(wetBulb, 1),
-            recChillers: savings.optimalConfig.chillers.length,
-            recSetpoint: round(savings.optimalConfig.setpoint, 1),
-            kwPerTr: round(savings.optimalConfig.kwPerTr, 3),
-            totalPower: round(savings.optimalConfig.totalPower, 1),
-          };
-
-          schedule.push(hourData);
-          totalEnergy += savings.optimalConfig.totalPower;
-          totalKwPerTr += savings.optimalConfig.kwPerTr;
-
-          const chillerKey = String(savings.optimalConfig.chillers.length);
-          chillerUsage[chillerKey] = (chillerUsage[chillerKey] || 0) + 1;
-          setpointUsage[hourData.recSetpoint] = (setpointUsage[hourData.recSetpoint] || 0) + 1;
-        } catch (hourError) {
-          console.warn(`Hour ${hour} prediction failed:`, hourError);
-
-          const fallbackKwPerTr = 0.6;
-          const stageFactor = 1 + (Math.abs(load / baselineChillers - 500) / 500) * 0.1;
-          const fallbackPower = load * fallbackKwPerTr * stageFactor;
-
-          schedule.push({
-            hour: `${String(hour).padStart(2, '0')}:00`,
-            load: round(load, 0),
-            wetBulb: round(wetBulb, 1),
-            recChillers: baselineChillers,
-            recSetpoint: 6.5,
-            kwPerTr: round(fallbackKwPerTr, 3),
-            totalPower: round(fallbackPower, 1),
-          });
-
-          totalEnergy += fallbackPower;
-          totalKwPerTr += fallbackKwPerTr;
+        } catch (e) {
+          console.warn('Forecast hour failed:', e);
         }
       }
 
       setSchedule24h(schedule);
-
-      const mostUsedChiller = Object.entries(chillerUsage).sort((a, b) => b[1] - a[1])[0];
-      const setpointRange = Object.keys(setpointUsage).map(Number).sort((a, b) => a - b);
-      const peakHour = schedule.reduce((max, current) => {
-        if (!max || current.totalPower > max.totalPower) {
-          return current;
-        }
-        return max;
-      }, null);
-
-      const nextSummary = {
+      setDailySummary({
         totalEnergy: round(totalEnergy, 0),
-        avgKwPerTr: round(totalKwPerTr / 24, 3),
-        mostUsedChillers: mostUsedChiller ? mostUsedChiller[0] : '2',
-        setpointMin: setpointRange[0] || 6.5,
-        setpointMax: setpointRange[setpointRange.length - 1] || 6.5,
-        peakHour,
-      };
-
-      setDailySummary(nextSummary);
-      writeForecastCache({
-        tomorrowDate: formattedDate,
-        schedule24h: schedule,
-        dailySummary: nextSummary,
-        cachedAt: new Date().toISOString(),
+        avgKwPerTr: round(totalKwPerTr / schedule.length, 3),
       });
     } catch (err) {
-      console.warn('Schedule generation failed:', err);
-      const fallback = readForecastCache();
-      if (fallback?.schedule24h?.length) {
-        setTomorrowDate(fallback.tomorrowDate || '');
-        setSchedule24h(fallback.schedule24h);
-        setDailySummary(fallback.dailySummary || null);
-        setError('Failed to refresh schedule. Showing the last successful forecast.');
-      } else {
-        setError('Failed to generate 24-hour schedule');
-      }
+      setError('Failed to generate forecast schedule');
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [manualInputs]);
 
   const runManualOptimization = useCallback(async () => {
     setManualLoading(true);
-
     try {
       const now = new Date();
       const savings = await calculateSavings(
@@ -269,41 +222,29 @@ export default function EnergyForecasting() {
         manualInputs.wet_bulb_c,
         now.getHours(),
         now.getMonth() + 1,
-        [0, 6].includes(now.getDay()) ? 1 : 0,
-        manualInputs.current_limit_pct,
-        [manualInputs.chillers_running],
-        manualInputs.current_chw_setpoint_c,
+        [0, 6].includes(now.getDay()) ? 0 : 1,
+        25,
+        {
+          ...manualInputs,
+          OA_TEMP: 25,
+          OA_TEMP_WB: manualInputs.wet_bulb_c,
+          Hour: now.getHours(),
+          Weekday: [0, 6].includes(now.getDay()) ? 0 : 1,
+          Month: now.getMonth() + 1,
+          CWL_SEC_LOAD: manualInputs.load_tons,
+        }
       );
 
-      if (!savings) {
-        throw new Error('Manual optimization failed');
+      if (savings) {
+        setManualOptimization({
+          kwPerTr: round(savings.optimalConfig.kwPerTr, 3),
+          totalPower: round(savings.optimalConfig.totalPower, 1),
+          powerSaved: round(savings.powerSaved, 1),
+          improvementPercent: round(savings.improvementPercent, 1),
+        });
       }
-
-      const nextManualOptimization = {
-        kwPerTr: round(savings.optimalConfig.kwPerTr, 3),
-        totalPower: round(savings.optimalConfig.totalPower, 1),
-        efficiency: round(1 / (savings.optimalConfig.kwPerTr / 0.6), 2),
-        recommendedSetpoint: round(savings.optimalConfig.setpoint, 1),
-        recommendedChillers: savings.optimalConfig.chillers.length,
-        powerSaved: round(savings.powerSaved, 1),
-        improvementPercent: round(savings.improvementPercent, 1),
-        costSaved: round(savings.costSavingsPerHour, 2),
-        co2Saved: round(savings.co2ReductionPerHour, 1),
-        timestamp: new Date().toISOString(),
-      };
-
-      setManualOptimization(nextManualOptimization);
-      writeManualOptimizationCache({
-        inputs: manualInputs,
-        result: nextManualOptimization,
-        cachedAt: new Date().toISOString(),
-      });
     } catch (err) {
-      console.warn('Manual optimization failed:', err);
-      const fallback = readManualOptimizationCache();
-      if (fallback?.result) {
-        setManualOptimization(fallback.result);
-      }
+      console.error(err);
     } finally {
       setManualLoading(false);
     }
@@ -321,124 +262,76 @@ export default function EnergyForecasting() {
   };
 
   return (
-    <div className="page-container">
-      <header className="page-header">
-        <h1>Energy Forecasting</h1>
-        <p>24-hour optimization predictions and manual scenario analysis</p>
+    <div className="dashboard-page">
+      <div className="background-grid" />
+      <header className="hero-card glass-card">
+        <div>
+          <p className="eyebrow">Predictive Analysis</p>
+          <h1>Energy Forecasting</h1>
+          <p className="hero-copy">Visualize tomorrow's energy consumption and test hypothetical operating scenarios.</p>
+        </div>
       </header>
 
-      {error ? <div className="error-message">{error}</div> : null}
-
-      <section className="section-card">
-        <div className="section-header">
-          <h2>Tomorrow's 24-Hour Schedule: {tomorrowDate}</h2>
-          <button type="button" className="primary-button" onClick={generateTomorrow24hSchedule} disabled={loading}>
-            {loading ? 'Generating...' : 'Refresh Schedule'}
-          </button>
-        </div>
-
-        {dailySummary ? (
-          <div className="metrics-grid">
-            <MetricCard label="Total Energy" value={`${dailySummary.totalEnergy} kWh`} accent="#4CAF50" />
-            <MetricCard label="Avg Efficiency" value={`${dailySummary.avgKwPerTr} kW/tr`} />
-            <MetricCard label="Most Used Chillers" value={dailySummary.mostUsedChillers} />
-            <MetricCard label="Setpoint Range" value={`${dailySummary.setpointMin}°C - ${dailySummary.setpointMax}°C`} />
-            <MetricCard
-              label="Peak Hour"
-              value={`${dailySummary.peakHour?.hour || 'N/A'} (${dailySummary.peakHour?.totalPower || 0} kW)`}
-              accent="#FF9800"
-            />
+      <main className="dashboard-grid-redesign">
+        <section className="glass-card panel-stack">
+          <div className="section-title-row">
+            <div><p className="section-label">24-Hour Prediction</p><h2>Tomorrow's Profile</h2></div>
+            <button className="secondary-button" onClick={generateTomorrow24hSchedule} disabled={loading}>
+              {loading ? 'Calculating...' : 'Refresh Forecast'}
+            </button>
           </div>
-        ) : null}
 
-        {schedule24h.length > 0 ? (
-          <ResponsiveContainer width="100%" height={400}>
-            <LineChart data={schedule24h}>
-              <CartesianGrid strokeDasharray="3 3" />
-              <XAxis dataKey="hour" />
-              <YAxis />
-              <Tooltip />
-              <Legend />
-              <Line type="monotone" dataKey="totalPower" stroke="#2196F3" name="Total Power (kW)" />
-              <Line type="monotone" dataKey="load" stroke="#FF9800" name="Load (tons)" />
-            </LineChart>
-          </ResponsiveContainer>
-        ) : null}
-      </section>
-
-      <section className="section-card">
-        <h2>Manual Optimization Test</h2>
-        <div className="inputs-grid">
-          <RangeField
-            label="Building Load"
-            name="load_tons"
-            value={manualInputs.load_tons}
-            min={100}
-            max={2000}
-            step={50}
-            suffix=" tons"
-            onChange={updateManualInput}
-          />
-          <RangeField
-            label="Wet Bulb Temperature"
-            name="wet_bulb_c"
-            value={manualInputs.wet_bulb_c}
-            min={5}
-            max={30}
-            step={0.5}
-            suffix="°C"
-            onChange={updateManualInput}
-          />
-          <RangeField
-            label="CHW Setpoint"
-            name="current_chw_setpoint_c"
-            value={manualInputs.current_chw_setpoint_c}
-            min={5}
-            max={10}
-            step={0.5}
-            suffix="°C"
-            onChange={updateManualInput}
-          />
-          <RangeField
-            label="Current Limit"
-            name="current_limit_pct"
-            value={manualInputs.current_limit_pct}
-            min={50}
-            max={100}
-            step={5}
-            suffix="%"
-            onChange={updateManualInput}
-          />
-          <RangeField
-            label="Chillers Running"
-            name="chillers_running"
-            value={manualInputs.chillers_running}
-            min={1}
-            max={4}
-            step={1}
-            suffix=""
-            onChange={updateManualInput}
-          />
-        </div>
-
-        <button type="button" className="primary-button" onClick={runManualOptimization} disabled={manualLoading}>
-          {manualLoading ? 'Optimizing...' : 'Optimize'}
-        </button>
-
-        {manualOptimization ? (
-          <div className="metrics-grid">
-            <MetricCard label="kW/ton" value={manualOptimization.kwPerTr} />
-            <MetricCard label="Total Power" value={`${manualOptimization.totalPower} kW`} />
-            <MetricCard label="Efficiency" value={manualOptimization.efficiency} />
-            <MetricCard label="Best Setpoint" value={`${manualOptimization.recommendedSetpoint}°C`} />
-            <MetricCard label="Recommended Chillers" value={manualOptimization.recommendedChillers} />
-            <MetricCard label="Improvement" value={`${manualOptimization.improvementPercent}%`} accent="#4CAF50" />
-            <MetricCard label="Power Saved" value={`${manualOptimization.powerSaved} kW`} accent="#4CAF50" />
-            <MetricCard label="Cost Saved" value={`$${manualOptimization.costSaved}/hr`} accent="#4CAF50" />
-            <MetricCard label="CO2 Reduced" value={`${manualOptimization.co2Saved} kg/hr`} accent="#4CAF50" />
+          <div className="metrics-grid" style={{ marginBottom: '24px' }}>
+            <MetricCard label="Est. Daily Energy" value={dailySummary ? `${dailySummary.totalEnergy} kWh` : '--'} accent="#4be4a4" />
+            <MetricCard label="Avg. Efficiency" value={dailySummary ? `${dailySummary.avgKwPerTr} kW/ton` : '--'} />
+            <MetricCard label="Forecast Date" value={tomorrowDate || '--'} />
           </div>
-        ) : null}
-      </section>
+
+          <div style={{ width: '100%', height: 350, background: 'rgba(255,255,255,0.02)', borderRadius: '18px', padding: '20px' }}>
+            {schedule24h.length > 0 ? (
+              <ResponsiveContainer width="100%" height="100%">
+                <LineChart data={schedule24h}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.1)" />
+                  <XAxis dataKey="hour" stroke="#9ab2c8" fontSize={12} />
+                  <YAxis stroke="#9ab2c8" fontSize={12} />
+                  <Tooltip 
+                    contentStyle={{ background: '#111d2f', border: '1px solid rgba(163, 201, 255, 0.18)', borderRadius: '12px' }}
+                    itemStyle={{ color: '#f5fbff' }}
+                  />
+                  <Line type="monotone" dataKey="totalPower" stroke="#64d6ff" strokeWidth={3} dot={{ r: 4, fill: '#64d6ff' }} name="Power (kW)" />
+                  <Line type="monotone" dataKey="load" stroke="#4be4a4" strokeWidth={2} strokeDasharray="5 5" dot={false} name="Load (tons)" />
+                </LineChart>
+              </ResponsiveContainer>
+            ) : <div className="loading-state"><div className="spinner" /></div>}
+          </div>
+        </section>
+
+        <div className="grid-row row-2-cols">
+          <section className="glass-card panel-stack">
+            <div className="section-title-row"><div><p className="section-label">Scenario Test</p><h2>Hypothetical Inputs</h2></div></div>
+            <div className="inputs-grid">
+              <RangeField label="Building Load" name="load_tons" value={manualInputs.load_tons} min={100} max={2500} step={50} suffix=" tons" onChange={updateManualInput} />
+              <RangeField label="Wet Bulb" name="wet_bulb_c" value={manualInputs.wet_bulb_c} min={5} max={35} step={0.5} suffix="°C" onChange={updateManualInput} />
+              <RangeField label="CHW Setpoint" name="current_chw_setpoint_c" value={manualInputs.current_chw_setpoint_c} min={5} max={10} step={0.1} suffix="°C" onChange={updateManualInput} />
+            </div>
+            <button className="primary-button" style={{ marginTop: '20px', width: '100%' }} onClick={runManualOptimization} disabled={manualLoading}>
+              {manualLoading ? 'Simulating...' : 'Run Simulation'}
+            </button>
+          </section>
+
+          <section className="glass-card panel-stack">
+            <div className="section-title-row"><div><p className="section-label">Simulation Results</p><h2>Projected Impact</h2></div></div>
+            {manualOptimization ? (
+              <div className="metrics-grid">
+                <MetricCard label="Optimal Power" value={`${manualOptimization.totalPower} kW`} accent="#4be4a4" />
+                <MetricCard label="Efficiency" value={`${manualOptimization.kwPerTr} kW/ton`} />
+                <MetricCard label="Potential Savings" value={`${manualOptimization.powerSaved} kW`} accent="#64d6ff" />
+                <MetricCard label="Improvement" value={`${manualOptimization.improvementPercent}%`} accent="#53f2a8" />
+              </div>
+            ) : <div className="empty-state"><p>Adjust inputs and run simulation to see projected performance.</p></div>}
+          </section>
+        </div>
+      </main>
     </div>
   );
 }

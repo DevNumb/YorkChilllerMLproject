@@ -3,10 +3,8 @@ import { buildAssistantContext } from '../services/assistantContext';
 import { calculateSavings, formatChillerStageLabel } from '../services/chillerOptimizer';
 import { saveOptimizationHistory, getOptimizationHistory } from '../services/supabaseDashboardService';
 
-const OPTIMIZER_URL = 'https://DevNumb-MLYorkchillerOptimzer.hf.space';
 const WEATHER_URL = import.meta.env.VITE_WEATHER_URL || 'https://api.open-meteo.com/v1/forecast';
 const HISTORY_KEY = 'chiller-optimizer-history-v1';
-const DASHBOARD_CONTEXT_KEY = 'chiller-dashboard-context-v1';
 
 const defaultLocation = {
   latitude: 36.8065,
@@ -15,18 +13,8 @@ const defaultLocation = {
 };
 
 const monthOptions = [
-  'January',
-  'February',
-  'March',
-  'April',
-  'May',
-  'June',
-  'July',
-  'August',
-  'September',
-  'October',
-  'November',
-  'December',
+  'January', 'February', 'March', 'April', 'May', 'June',
+  'July', 'August', 'September', 'October', 'November', 'December',
 ];
 
 const scenarioPresets = [
@@ -34,70 +22,22 @@ const scenarioPresets = [
     label: 'Summer Peak',
     icon: '🏭',
     values: {
-      load_tons: 1800,
-      wet_bulb_c: 26,
-      current_chw_setpoint_c: 6,
-      current_limit_pct: 100,
-      hour: 14,
-      month: 7,
-      is_weekend: 0,
-      chillers_running: 4,
+      load_tons: 1800, wet_bulb_c: 26, current_chw_setpoint_c: 6, current_limit_pct: 100, hour: 14, month: 7, is_weekend: 0, chillers_running: 3,
+      CHL_STA_1: 1, CHL_STA_2: 1, CHL_STA_3: 1,
+      CHL_COMP_SPD_CTRL_1: 95, CHL_COMP_SPD_CTRL_2: 95, CHL_COMP_SPD_CTRL_3: 95,
+      CT_FAN_SPD_CTRL_1: 85, CT_FAN_SPD_CTRL_2: 85, CT_FAN_SPD_CTRL_3: 85,
+      CHL_CD_FLOW_1: 300, CHL_CD_FLOW_2: 300, CHL_CD_FLOW_3: 300
     },
   },
   {
     label: 'Winter Night',
     icon: '❄️',
     values: {
-      load_tons: 400,
-      wet_bulb_c: 5,
-      current_chw_setpoint_c: 7,
-      current_limit_pct: 70,
-      hour: 2,
-      month: 1,
-      is_weekend: 0,
-      chillers_running: 1,
-    },
-  },
-  {
-    label: 'Spring Moderate',
-    icon: '🌿',
-    values: {
-      load_tons: 850,
-      wet_bulb_c: 14,
-      current_chw_setpoint_c: 6.5,
-      current_limit_pct: 85,
-      hour: 10,
-      month: 4,
-      is_weekend: 0,
-      chillers_running: 2,
-    },
-  },
-  {
-    label: 'Evening Low',
-    icon: '🌙',
-    values: {
-      load_tons: 550,
-      wet_bulb_c: 12,
-      current_chw_setpoint_c: 7,
-      current_limit_pct: 65,
-      hour: 19,
-      month: 5,
-      is_weekend: 0,
-      chillers_running: 2,
-    },
-  },
-  {
-    label: 'Peak Demand',
-    icon: '⚡',
-    values: {
-      load_tons: 1600,
-      wet_bulb_c: 25,
-      current_chw_setpoint_c: 6,
-      current_limit_pct: 100,
-      hour: 15,
-      month: 8,
-      is_weekend: 0,
-      chillers_running: 3,
+      load_tons: 400, wet_bulb_c: 5, current_chw_setpoint_c: 7, current_limit_pct: 70, hour: 2, month: 1, is_weekend: 0, chillers_running: 1,
+      CHL_STA_1: 1, CHL_STA_2: 0, CHL_STA_3: 0,
+      CHL_COMP_SPD_CTRL_1: 40, CHL_COMP_SPD_CTRL_2: 0, CHL_COMP_SPD_CTRL_3: 0,
+      CT_FAN_SPD_CTRL_1: 30, CT_FAN_SPD_CTRL_2: 0, CT_FAN_SPD_CTRL_3: 0,
+      CHL_CD_FLOW_1: 200, CHL_CD_FLOW_2: 0, CHL_CD_FLOW_3: 0
     },
   },
 ];
@@ -110,182 +50,45 @@ const initialInputs = {
   hour: new Date().getHours(),
   month: new Date().getMonth() + 1,
   is_weekend: [0, 6].includes(new Date().getDay()) ? 1 : 0,
+  oa_temp: 25,
   chillers_running: 3,
+  CHL_STA_1: 1, CHL_STA_2: 1, CHL_STA_3: 1,
+  CHL_COMP_SPD_CTRL_1: 85, CHL_COMP_SPD_CTRL_2: 85, CHL_COMP_SPD_CTRL_3: 85,
+  CT_FAN_SPD_CTRL_1: 65, CT_FAN_SPD_CTRL_2: 65, CT_FAN_SPD_CTRL_3: 65,
+  CHL_CD_FLOW_1: 280, CHL_CD_FLOW_2: 280, CHL_CD_FLOW_3: 280,
 };
 
-function readHistory() {
-  if (typeof window === 'undefined') {
-    return [];
-  }
-
-  try {
-    const raw = window.localStorage.getItem(HISTORY_KEY);
-    return raw ? JSON.parse(raw) : [];
-  } catch {
-    return [];
-  }
-}
-
-function clamp(value, min, max) {
-  return Math.min(Math.max(value, min), max);
-}
-
-function round(value, digits = 1) {
-  return Number(value.toFixed(digits));
-}
-
-function normalizeOptimizerBaseUrl(url) {
-  return url.replace(/\/+$/, '');
-}
+function clamp(value, min, max) { return Math.min(Math.max(value, min), max); }
+function round(value, digits = 1) { return Number(value.toFixed(digits)); }
 
 function calculateWetBulbC(tempC, humidity) {
   const rh = clamp(humidity, 1, 100);
-  const tw =
-    tempC * Math.atan(0.151977 * Math.sqrt(rh + 8.313659)) +
-    Math.atan(tempC + rh) -
-    Math.atan(rh - 1.676331) +
-    0.00391838 * Math.pow(rh, 1.5) * Math.atan(0.023101 * rh) -
-    4.686035;
-
+  const tw = tempC * Math.atan(0.151977 * Math.sqrt(rh + 8.313659)) +
+    Math.atan(tempC + rh) - Math.atan(rh - 1.676331) +
+    0.00391838 * Math.pow(rh, 1.5) * Math.atan(0.023101 * rh) - 4.686035;
   return round(tw, 1);
 }
 
-function flattenEntries(value, parentKey = '', entries = []) {
-  if (value === null || value === undefined) {
-    return entries;
-  }
-
-  if (Array.isArray(value)) {
-    value.forEach((item, index) => flattenEntries(item, `${parentKey}.${index}`, entries));
-    return entries;
-  }
-
-  if (typeof value === 'object') {
-    Object.entries(value).forEach(([key, item]) => {
-      const path = parentKey ? `${parentKey}.${key}` : key;
-      flattenEntries(item, path, entries);
+function buildStagingAction(chillers, recommendedSetpoint, currentTotalPower, optimalTotalPower, settings) {
+  const powerSaved = round(currentTotalPower - optimalTotalPower, 1);
+  let action = `Stage chillers ${formatChillerStageLabel(chillers)} and set CHW setpoint to ${recommendedSetpoint.toFixed(1)}°C. `;
+  
+  if (settings) {
+    action += "Set ";
+    chillers.forEach((chId) => {
+      action += `Chiller ${chId} to ${settings[`CHL_COMP_SPD_CTRL_${chId}`]}% Speed & ${settings[`CT_FAN_SPD_CTRL_${chId}`]}% Fan. `;
     });
-    return entries;
   }
-
-  entries.push([parentKey.toLowerCase(), value]);
-  return entries;
-}
-
-function findNumericField(source, patterns) {
-  const extractNumericValue = (value) => {
-    if (typeof value === 'number') {
-      return Number.isFinite(value) ? value : null;
-    }
-
-    if (typeof value === 'string') {
-      const direct = Number(value);
-      if (!Number.isNaN(direct)) {
-        return direct;
-      }
-
-      const matched = value.match(/-?\d+(\.\d+)?/);
-      if (matched) {
-        const parsed = Number(matched[0]);
-        return Number.isNaN(parsed) ? null : parsed;
-      }
-    }
-
-    return null;
-  };
-
-  const entries = flattenEntries(source);
-  const normalizedPatterns = patterns.map((pattern) => pattern.toLowerCase());
-
-  for (const [key, value] of entries) {
-    const numericValue = extractNumericValue(value);
-    if (numericValue === null) {
-      continue;
-    }
-
-    if (normalizedPatterns.some((pattern) => key.includes(pattern))) {
-      return numericValue;
-    }
-  }
-
-  return null;
-}
-
-function findTextField(source, patterns) {
-  const entries = flattenEntries(source);
-  const normalizedPatterns = patterns.map((pattern) => pattern.toLowerCase());
-
-  for (const [key, value] of entries) {
-    if (typeof value !== 'string') {
-      continue;
-    }
-
-    if (normalizedPatterns.some((pattern) => key.includes(pattern))) {
-      return value;
-    }
-  }
-
-  return '';
-}
-
-function buildOperatorAction(currentSetpoint, recommendedSetpoint, currentTotalPower, optimalTotalPower) {
-  const direction = recommendedSetpoint > currentSetpoint ? 'Raise' : 'Lower';
-  const powerSaved = round(currentTotalPower - optimalTotalPower, 1);
-  return `${direction} the CHW setpoint from ${currentSetpoint.toFixed(1)}°C to ${recommendedSetpoint.toFixed(
-    1,
-  )}°C on the OptiView panel to reduce total power from ${currentTotalPower.toFixed(0)} kW to ${optimalTotalPower.toFixed(
-    0,
-  )} kW (${powerSaved.toFixed(1)} kW saved). Monitor the system for 15 minutes.`;
-}
-
-function buildStagingAction(chillers, recommendedSetpoint, currentTotalPower, optimalTotalPower) {
-  const powerSaved = round(currentTotalPower - optimalTotalPower, 1);
-  return `Stage chillers ${formatChillerStageLabel(chillers)} and set CHW setpoint to ${recommendedSetpoint.toFixed(
-    1,
-  )}°C on the OptiView panel to reduce total power from ${currentTotalPower.toFixed(0)} kW to ${optimalTotalPower.toFixed(
-    0,
-  )} kW (${powerSaved.toFixed(1)} kW saved).`;
-}
-
-function formatCurrency(value) {
-  return new Intl.NumberFormat('en-US', {
-    style: 'currency',
-    currency: 'USD',
-    maximumFractionDigits: 0,
-  }).format(value);
-}
-
-function persistDashboardContext(payload) {
-  if (typeof window === 'undefined' || !window?.localStorage) {
-    return;
-  }
-
-  try {
-    window.__DASHBOARD_CONTEXT__ = payload;
-    window.localStorage.setItem(DASHBOARD_CONTEXT_KEY, JSON.stringify(payload));
-  } catch {
-    // Silent fail if storage is unavailable.
-  }
-}
-
-function formatTimestamp(dateLike) {
-  return new Intl.DateTimeFormat('en-US', {
-    dateStyle: 'medium',
-    timeStyle: 'short',
-  }).format(new Date(dateLike));
+  
+  action += `Reduces power from ${currentTotalPower.toFixed(0)}kW to ${optimalTotalPower.toFixed(0)}kW.`;
+  return action;
 }
 
 function getEfficiencyTone(value) {
-  if (value < 0.65) {
-    return { label: 'Optimal', color: '#53f2a8' };
-  }
-  if (value < 0.75) {
-    return { label: 'Needs Adjustment', color: '#f7df72' };
-  }
-  if (value < 0.85) {
-    return { label: 'Needs Adjustment', color: '#ff9f5a' };
-  }
-  return { label: 'Critical', color: '#ff6b7d' };
+  if (value < 0.65) return { label: 'Optimal', color: '#53f2a8' };
+  if (value < 0.75) return { label: 'Good', color: '#8ef5bf' };
+  if (value < 0.85) return { label: 'Fair', color: '#f7df72' };
+  return { label: 'Poor', color: '#ff6b7d' };
 }
 
 function buildGaugeStyle(value) {
@@ -299,9 +102,7 @@ function MetricCard({ label, value, hint, accent }) {
   return (
     <div className="metric-card">
       <span className="metric-label">{label}</span>
-      <strong className="metric-value" style={{ color: accent || '#f5fbff' }}>
-        {value}
-      </strong>
+      <strong className="metric-value" style={{ color: accent || '#f5fbff' }}>{value}</strong>
       {hint ? <span className="metric-hint">{hint}</span> : null}
     </div>
   );
@@ -310,997 +111,329 @@ function MetricCard({ label, value, hint, accent }) {
 function RangeField({ label, name, value, min, max, step, suffix, onChange }) {
   return (
     <label className="field-card">
-      <div className="field-heading">
-        <span>{label}</span>
-        <strong>
-          {value}
-          {suffix}
-        </strong>
-      </div>
-      <input
-        type="range"
-        min={min}
-        max={max}
-        step={step}
-        value={value}
-        onChange={(event) => onChange(name, Number(event.target.value))}
-      />
-      <input
-        className="number-input"
-        type="number"
-        min={min}
-        max={max}
-        step={step}
-        value={value}
-        onChange={(event) => onChange(name, Number(event.target.value))}
-      />
+      <div className="field-heading"><span>{label}</span><strong>{value}{suffix}</strong></div>
+      <input type="range" min={min} max={max} step={step} value={value} onChange={(e) => onChange(name, Number(e.target.value))} />
+      <input className="number-input" type="number" min={min} max={max} step={step} value={value} onChange={(e) => onChange(name, Number(e.target.value))} />
     </label>
   );
 }
 
-export default function Dashboard() {
-  const [clock, setClock] = useState(() => new Date());
-  const [inputs, setInputs] = useState(initialInputs);
-  const [weather, setWeather] = useState({
-    loading: true,
-    error: '',
-    location: defaultLocation.label,
-    temperature: null,
-    humidity: null,
-    wetBulb: null,
-    source: 'manual',
-  });
-  const [useWeatherSuggestion, setUseWeatherSuggestion] = useState(true);
-  const [result, setResult] = useState(null);
-  const [history, setHistory] = useState(readHistory);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
-  const [chillerOptimization, setChillerOptimization] = useState(null);
-  const [optimizationLoading, setOptimizationLoading] = useState(false);
-  const [optimizationHistory, setOptimizationHistory] = useState(() => {
-    if (typeof window === 'undefined') return [];
-    try {
-      const raw = window.localStorage.getItem('chiller-optimization-history-v1');
-      return raw ? JSON.parse(raw) : [];
-    } catch {
-      return [];
-    }
-  });
-
-  useEffect(() => {
-    const timer = window.setInterval(() => setClock(new Date()), 1000);
-    return () => window.clearInterval(timer);
-  }, []);
-
-  // Load optimization history from Supabase on mount
-  useEffect(() => {
-    async function loadDatabaseHistory() {
-      try {
-        const dbHistory = await getOptimizationHistory(20);
-        if (dbHistory && dbHistory.length > 0) {
-          setHistory(dbHistory);
-          setOptimizationHistory(dbHistory);
-          console.log('[Dashboard] Loaded', dbHistory.length, 'recommendations from database');
-        }
-      } catch (err) {
-        console.warn('[Dashboard] Failed to load history from database:', err.message);
-        // Fall back to localStorage if database fails
-        const localHistory = readHistory();
-        if (localHistory.length > 0) {
-          setHistory(localHistory);
-          setOptimizationHistory(localHistory);
-        }
-      }
-    }
-    loadDatabaseHistory();
-  }, []);
-
-  useEffect(() => {
-    window.localStorage.setItem(HISTORY_KEY, JSON.stringify(history.slice(0, 10)));
-  }, [history]);
-
-  useEffect(() => {
-    if (typeof window !== 'undefined' && window?.localStorage && optimizationHistory.length > 0) {
-      window.localStorage.setItem('chiller-optimization-history-v1', JSON.stringify(optimizationHistory.slice(0, 20)));
-    }
-  }, [optimizationHistory]);
-
-  useEffect(() => {
-    const controller = new AbortController();
-
-    async function loadWeather(latitude, longitude, label) {
-      try {
-        const url = `${WEATHER_URL}?latitude=${latitude}&longitude=${longitude}&current=temperature_2m,relative_humidity_2m&timezone=auto`;
-        const response = await fetch(url, { signal: controller.signal });
-
-        if (!response.ok) {
-          throw new Error('Weather service unavailable');
-        }
-
-        const data = await response.json();
-        const temperature = data?.current?.temperature_2m;
-        const humidity = data?.current?.relative_humidity_2m;
-        const wetBulb =
-          typeof temperature === 'number' && typeof humidity === 'number'
-            ? calculateWetBulbC(temperature, humidity)
-            : null;
-
-        setWeather({
-          loading: false,
-          error: '',
-          location: label,
-          temperature,
-          humidity,
-          wetBulb,
-          source: 'live',
-        });
-      } catch (weatherError) {
-        if (weatherError.name === 'AbortError') {
-          return;
-        }
-
-        setWeather((currentWeather) => ({
-          ...currentWeather,
-          loading: false,
-          error: 'Live weather unavailable. Manual wet bulb control is still active.',
-          source: 'manual',
-        }));
-      }
-    }
-
-    if ('geolocation' in navigator) {
-      navigator.geolocation.getCurrentPosition(
-        (position) => {
-          loadWeather(position.coords.latitude, position.coords.longitude, 'Current site');
-        },
-        () => {
-          loadWeather(defaultLocation.latitude, defaultLocation.longitude, defaultLocation.label);
-        },
-        { timeout: 8000 },
-      );
-    } else {
-      loadWeather(defaultLocation.latitude, defaultLocation.longitude, defaultLocation.label);
-    }
-
-    return () => controller.abort();
-  }, []);
-
-  useEffect(() => {
-    if (useWeatherSuggestion && weather.wetBulb !== null) {
-      setInputs((current) => ({ ...current, wet_bulb_c: weather.wetBulb }));
-    }
-  }, [useWeatherSuggestion, weather.wetBulb]);
-
-  const status = useMemo(
-    () => getEfficiencyTone(result?.result?.currentEfficiency ?? 0.72),
-    [result?.result?.currentEfficiency],
+function ChillerBaselineControl({ id, inputs, onChange }) {
+  const isActive = inputs[`CHL_STA_${id}`] === 1;
+  return (
+    <div className={`chiller-status-mini ${!isActive ? 'is-off' : ''}`}>
+      <div className="mini-header">
+        <span>Unit {id}</span>
+        <button 
+          className={`toggle-small ${isActive ? 'on' : 'off'}`}
+          onClick={() => onChange(`CHL_STA_${id}`, isActive ? 0 : 1)}
+        >
+          {isActive ? 'ON' : 'OFF'}
+        </button>
+      </div>
+      {isActive && (
+        <div className="mini-controls">
+          <div className="mini-input">
+            <small>Spd</small>
+            <input type="number" value={inputs[`CHL_COMP_SPD_CTRL_${id}`]} onChange={(e) => onChange(`CHL_COMP_SPD_CTRL_${id}`, Number(e.target.value))} />
+          </div>
+          <div className="mini-input">
+            <small>Fan</small>
+            <input type="number" value={inputs[`CT_FAN_SPD_CTRL_${id}`]} onChange={(e) => onChange(`CT_FAN_SPD_CTRL_${id}`, Number(e.target.value))} />
+          </div>
+          <div className="mini-input">
+            <small>Flow</small>
+            <input type="number" value={inputs[`CHL_CD_FLOW_${id}`]} onChange={(e) => onChange(`CHL_CD_FLOW_${id}`, Number(e.target.value))} />
+          </div>
+        </div>
+      )}
+    </div>
   );
-  const assistantContext = useMemo(
-    () =>
-      buildAssistantContext({
-        weather,
-        inputs,
-        result,
-      }),
-    [weather, inputs, result],
-  );
+}
 
-  useEffect(() => {
-    persistDashboardContext({
-      liveConditions: {
-        location: weather.location || 'Unknown site',
-        source: weather.source || 'manual',
-        outdoorTemperatureC: weather.temperature ?? null,
-        humidityPct: weather.humidity ?? null,
-        wetBulbC: weather.wetBulb ?? null,
-        weatherError: weather.error || '',
-      },
-      optimizationInputs: {
-        coolingLoadTons: inputs.load_tons ?? null,
-        wetBulbC: inputs.wet_bulb_c ?? null,
-        currentChwSetpointC: inputs.current_chw_setpoint_c ?? null,
-        currentLimitPct: inputs.current_limit_pct ?? null,
-        hour: inputs.hour ?? null,
-        month: inputs.month ?? null,
-        isWeekend: inputs.is_weekend === 1,
-        chillersRunning: inputs.chillers_running ?? null,
-      },
-      optimizationHistory: history.map((entry) => ({
-        timestamp: entry.timestamp || null,
-        coolingLoadTons: entry.inputs?.load_tons ?? null,
-        wetBulbC: entry.inputs?.wet_bulb_c ?? null,
-        currentChwSetpointC: entry.inputs?.current_chw_setpoint_c ?? null,
-        currentLimitPct: entry.inputs?.current_limit_pct ?? null,
-        hour: entry.inputs?.hour ?? null,
-        month: entry.inputs?.month ?? null,
-        isWeekend: entry.inputs?.is_weekend === 1,
-        chillersRunning: entry.inputs?.chillers_running ?? null,
-        currentEfficiencyKwPerTon: entry.result?.currentEfficiency ?? null,
-        optimalEfficiencyKwPerTon: entry.result?.optimalEfficiency ?? null,
-        improvementPercent: entry.result?.improvementPercent ?? null,
-        powerSavedKw: entry.result?.powerSavedKw ?? null,
-        costSavingsUsd: entry.result?.costSavingsUsd ?? null,
-        co2ReductionKg: entry.result?.co2ReductionKg ?? null,
-        recommendedSetpointC: entry.result?.recommendedSetpoint ?? null,
-        operatorAction: entry.result?.operatorAction || '',
-      })),
-      faultDetection: {
-        activeFaults: 0,
-        alerts: [],
-      },
-      systemMetrics: {
-        currentEfficiencyKwPerTon: result?.result?.currentEfficiency ?? null,
-        optimalEfficiencyKwPerTon: result?.result?.optimalEfficiency ?? null,
-        chillersRunning: inputs.chillers_running ?? null,
-      },
-      capturedAt: new Date().toISOString(),
-    });
-  }, [weather, inputs, history, result]);
-
-  function updateInput(name, rawValue) {
-    const bounds = {
-      load_tons: [200, 2500],
-      wet_bulb_c: [-5, 35],
-      current_chw_setpoint_c: [5, 10],
-      current_limit_pct: [50, 100],
-      hour: [0, 23],
-      month: [1, 12],
-      chillers_running: [1, 4],
-    };
-
-    const [min, max] = bounds[name] || [-Infinity, Infinity];
-    const nextValue = typeof rawValue === 'number' ? clamp(rawValue, min, max) : rawValue;
-
-    setInputs((current) => ({
-      ...current,
-      [name]: name === 'current_chw_setpoint_c' || name === 'wet_bulb_c' ? round(nextValue, 1) : nextValue,
-    }));
-
-    if (name === 'wet_bulb_c') {
-      setUseWeatherSuggestion(false);
-    }
-  }
-
-  function applyPreset(values) {
-    setInputs(values);
-    setUseWeatherSuggestion(false);
-  }
-
-  async function runOptimization() {
-    setLoading(true);
-    setError('');
-
-    try {
-      const savings = await calculateSavings(
-        inputs.load_tons,
-        inputs.wet_bulb_c,
-        inputs.hour,
-        inputs.month,
-        inputs.is_weekend,
-        inputs.current_limit_pct,
-        [inputs.chillers_running],
-        inputs.current_chw_setpoint_c,
-      );
-
-      if (!savings) {
-        throw new Error('Optimization engine returned no results. Please check your inputs and API connection.');
-      }
-
-      const metrics = {
-        currentEfficiency: savings.currentConfig.kwPerTr,
-        optimalEfficiency: savings.optimalConfig.kwPerTr,
-        currentTotalPower: savings.currentConfig.totalPower,
-        optimalTotalPower: savings.optimalConfig.totalPower,
-        powerSaved: savings.powerSaved,
-        powerSavedKw: savings.powerSaved,
-        energySavingsKwh: savings.powerSaved,
-        improvementPercent: savings.improvementPercent,
-        recommendedSetpoint: savings.optimalConfig.setpoint,
-        recommendedChillers: savings.optimalConfig.chillers.length,
-        recommendedChillerList: savings.optimalConfig.chillers,
-        costSavingsUsd: savings.costSavingsPerHour,
-        co2ReductionKg: savings.co2ReductionPerHour,
-        costSavingsPerHour: savings.costSavingsPerHour,
-        co2ReductionPerHour: savings.co2ReductionPerHour,
-        currentConfig: savings.currentConfig,
-        optimalConfig: savings.optimalConfig,
-        operatorAction:
-          savings.optimalConfig.chillers.length !== inputs.chillers_running
-            ? buildStagingAction(
-                savings.optimalConfig.chillers,
-                savings.optimalConfig.setpoint,
-                savings.currentConfig.totalPower,
-                savings.optimalConfig.totalPower,
-              )
-            : buildOperatorAction(
-                inputs.current_chw_setpoint_c,
-                savings.optimalConfig.setpoint,
-                savings.currentConfig.totalPower,
-                savings.optimalConfig.totalPower,
-              ),
-      };
-
-      const entry = {
-        id: crypto.randomUUID(),
-        timestamp: new Date().toISOString(),
-        inputs: { ...inputs },
-        result: metrics,
-      };
-
-      setResult(entry);
-      setHistory((current) => [entry, ...current].slice(0, 10));
-      setChillerOptimization(savings);
-      setOptimizationHistory((current) => [entry, ...current].slice(0, 20));
-
-      // Save to Supabase
-      try {
-        await saveOptimizationHistory(entry);
-        console.log('[Dashboard] ✓ Optimization saved to database');
-      } catch (dbError) {
-        console.error('[Dashboard] ✗ Failed to save to database:', {
-          message: dbError.message,
-          code: dbError.code,
-          details: dbError.details,
-          hint: dbError.hint,
-        });
-        // Don't fail the optimization if database save fails
-      }
-    } catch (requestError) {
-      console.error('Optimization error:', requestError);
-      const lastRecommendation = history[0];
-
-      if (lastRecommendation) {
-        setResult(lastRecommendation);
-        setError(`API error: ${requestError.message}. Showing last successful recommendation.`);
-      } else {
-        setError(`Optimization failed: ${requestError.message}. Check API connection and input values.`);
-      }
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  async function runChillerOptimization(payload) {
-    // This is now handled in runOptimization
-    setOptimizationLoading(false);
-  }
-
-  function restoreHistoryItem(item) {
-    setInputs(item.inputs);
-    setResult(item);
-    setUseWeatherSuggestion(false);
-  }
-
-  function clearHistory() {
-    setHistory([]);
-    window.localStorage.removeItem(HISTORY_KEY);
-  }
-
-  function exportCsv() {
-    if (!history.length) {
-      return;
-    }
-
-    const header = [
-      'timestamp',
-      'load_tons',
-      'wet_bulb_c',
-      'current_chw_setpoint_c',
-      'current_limit_pct',
-      'hour',
-      'month',
-      'is_weekend',
-      'chillers_running',
-      'current_efficiency_kw_per_ton',
-      'optimal_efficiency_kw_per_ton',
-      'improvement_percent',
-      'power_saved_kw',
-      'cost_savings_usd',
-      'co2_reduction_kg',
-      'recommended_setpoint_c',
-    ];
-
-    const rows = history.map((item) => [
-      item.timestamp,
-      item.inputs.load_tons,
-      item.inputs.wet_bulb_c,
-      item.inputs.current_chw_setpoint_c,
-      item.inputs.current_limit_pct,
-      item.inputs.hour,
-      item.inputs.month,
-      item.inputs.is_weekend,
-      item.inputs.chillers_running,
-      item.result.currentEfficiency,
-      item.result.optimalEfficiency,
-      item.result.improvementPercent,
-      item.result.powerSavedKw,
-      item.result.costSavingsUsd,
-      item.result.co2ReductionKg,
-      item.result.recommendedSetpoint,
-    ]);
-
-    const csv = [header, ...rows]
-      .map((row) => row.map((cell) => `"${String(cell).replaceAll('"', '""')}"`).join(','))
-      .join('\n');
-
-    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = `chiller-optimization-history-${new Date().toISOString().slice(0, 10)}.csv`;
-    link.click();
-    URL.revokeObjectURL(url);
-  }
-
-// System Status Card Component
 function SystemStatusCard({ chillersRunning, efficiency, faultCount }) {
-  const efficiencyStatus = efficiency < 0.65 ? 'Optimal' : efficiency < 0.75 ? 'Good' : efficiency < 0.85 ? 'Fair' : 'Poor';
-  const efficiencyColor = efficiency < 0.65 ? '#53f2a8' : efficiency < 0.75 ? '#8ef5bf' : efficiency < 0.85 ? '#f7df72' : '#ff6b7d';
-  
+  const tone = getEfficiencyTone(efficiency);
   return (
     <div className="system-status-card">
-      <div className="system-status-header">
-        <p className="section-label">System Status</p>
-        <h2>Real-Time Overview</h2>
-      </div>
+      <div className="system-status-header"><p className="section-label">System Status</p><h2>Real-Time Overview</h2></div>
       <div className="system-status-grid">
-        <div className="status-item">
-          <span className="status-icon">❄️</span>
-          <div className="status-info">
-            <span className="status-label">Chillers Running</span>
-            <strong className="status-value">{chillersRunning} / 4</strong>
-          </div>
-        </div>
-        <div className="status-item">
-          <span className="status-icon">📊</span>
-          <div className="status-info">
-            <span className="status-label">Current Efficiency</span>
-            <strong className="status-value" style={{ color: efficiencyColor }}>{efficiency.toFixed(3)} kW/ton</strong>
-          </div>
-        </div>
-        <div className="status-item">
-          <span className="status-icon">⚠️</span>
-          <div className="status-info">
-            <span className="status-label">Active Faults</span>
-            <strong className="status-value" style={{ color: faultCount > 0 ? '#ff6b7d' : '#53f2a8' }}>{faultCount}</strong>
-          </div>
-        </div>
+        <div className="status-item"><span className="status-icon">❄️</span><div className="status-info"><span className="status-label">Chillers Running</span><strong className="status-value">{chillersRunning} / 4</strong></div></div>
+        <div className="status-item"><span className="status-icon">📊</span><div className="status-info"><span className="status-label">Current Efficiency</span><strong className="status-value" style={{ color: tone.color }}>{efficiency.toFixed(3)} kW/ton</strong></div></div>
+        <div className="status-item"><span className="status-icon">⚠️</span><div className="status-info"><span className="status-label">Active Faults</span><strong className="status-value" style={{ color: faultCount > 0 ? '#ff6b7d' : '#53f2a8' }}>{faultCount}</strong></div></div>
       </div>
       <div className="system-status-footer">
-        <span className="efficiency-badge" style={{ backgroundColor: `${efficiencyColor}22`, color: efficiencyColor }}>
-          {efficiencyStatus}
-        </span>
+        <span className="efficiency-badge" style={{ backgroundColor: `${tone.color}22`, color: tone.color }}>{tone.label}</span>
         <span className="last-update">Updated: {new Date().toLocaleTimeString()}</span>
       </div>
     </div>
   );
 }
 
-// ...existing code...
+export default function Dashboard() {
+  const [clock, setClock] = useState(() => new Date());
+  const [inputs, setInputs] = useState(initialInputs);
+  const [weather, setWeather] = useState({ loading: true, error: '', location: defaultLocation.label, temperature: null, humidity: null, wetBulb: null, source: 'manual' });
+  const [useWeatherSuggestion, setUseWeatherSuggestion] = useState(true);
+  const [result, setResult] = useState(null);
+  const [history, setHistory] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [recharging, setRecharging] = useState(false);
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    const timer = setInterval(() => setClock(new Date()), 1000);
+    return () => clearInterval(timer);
+  }, []);
+
+  useEffect(() => {
+    async function loadHistory() {
+      try {
+        const dbHistory = await getOptimizationHistory(10);
+        if (dbHistory) setHistory(dbHistory);
+      } catch (e) { console.error(e); }
+    }
+    loadHistory();
+  }, []);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    async function loadWeather(lat, lon, label) {
+      try {
+        const response = await fetch(`${WEATHER_URL}?latitude=${lat}&longitude=${lon}&current=temperature_2m,relative_humidity_2m&timezone=auto`, { signal: controller.signal });
+        const data = await response.json();
+        const t = data?.current?.temperature_2m;
+        const h = data?.current?.relative_humidity_2m;
+        const wb = (t && h) ? calculateWetBulbC(t, h) : null;
+        setWeather({ loading: false, error: '', location: label, temperature: t, humidity: h, wetBulb: wb, source: 'live' });
+      } catch { setWeather(w => ({ ...w, loading: false, source: 'manual' })); }
+    }
+    navigator.geolocation.getCurrentPosition(p => loadWeather(p.coords.latitude, p.coords.longitude, 'Current site'), () => loadWeather(defaultLocation.latitude, defaultLocation.longitude, defaultLocation.label));
+    return () => controller.abort();
+  }, []);
+
+  useEffect(() => { if (useWeatherSuggestion && weather.wetBulb !== null) updateInput('wet_bulb_c', weather.wetBulb); }, [useWeatherSuggestion, weather.wetBulb]);
+
+  const updateInput = (name, val) => {
+    setInputs(prev => ({ ...prev, [name]: val }));
+    if (name === 'wet_bulb_c') setUseWeatherSuggestion(false);
+  };
+
+  const runOptimization = async () => {
+    setLoading(true);
+    setRecharging(true);
+    setError('');
+    try {
+      const currentSettings = {
+        ...inputs,
+        OA_TEMP: weather.temperature || inputs.oa_temp || 25,
+        OA_TEMP_WB: inputs.wet_bulb_c,
+        Hour: inputs.hour,
+        Weekday: inputs.is_weekend ? 0 : 1,
+        Month: inputs.month,
+        CWL_SEC_LOAD: inputs.load_tons
+      };
+
+      const savings = await calculateSavings(inputs.load_tons, inputs.wet_bulb_c, inputs.hour, inputs.month, inputs.is_weekend ? 0 : 1, currentSettings.OA_TEMP, currentSettings);
+      if (!savings) throw new Error('Optimization service failed to return results.');
+
+      const metrics = {
+        currentEfficiency: savings.currentConfig.kwPerTr,
+        optimalEfficiency: savings.optimalConfig.kwPerTr,
+        currentTotalPower: savings.currentConfig.totalPower,
+        optimalTotalPower: savings.optimalConfig.totalPower,
+        powerSavedKw: savings.powerSaved,
+        improvementPercent: savings.improvementPercent,
+        recommendedSetpoint: savings.optimalConfig.setpoint || 6.5,
+        recommendedChillers: savings.optimalConfig.chillers.length,
+        costSavingsUsd: savings.costSavingsPerHour || (savings.powerSaved * 0.12),
+        co2ReductionKg: savings.co2ReductionPerHour || (savings.powerSaved * 0.42),
+        operatorAction: buildStagingAction(savings.optimalConfig.chillers, savings.optimalConfig.setpoint || 6.5, savings.currentConfig.totalPower, savings.optimalConfig.totalPower, savings.optimalConfig.settings),
+        recommended_settings: savings.optimalConfig.settings
+      };
+
+      const entry = { id: crypto.randomUUID(), timestamp: new Date().toISOString(), inputs: { ...inputs }, result: metrics };
+      setResult(entry);
+      setHistory(h => [entry, ...h].slice(0, 10));
+      await saveOptimizationHistory(entry);
+    } catch (e) { setError(e.message); }
+    finally { 
+      setLoading(false);
+      setTimeout(() => setRecharging(false), 800);
+    }
+  };
+
+  const statusTone = useMemo(() => getEfficiencyTone(result?.result?.currentEfficiency ?? 0.72), [result]);
 
   return (
-    <div className="dashboard-page">
+    <div className={`dashboard-page ${recharging ? 'recharging-active' : ''}`}>
+      <style>{`
+        .recharging-indicator {
+          font-size: 0.75rem;
+          font-weight: 800;
+          color: #7fe6ff;
+          letter-spacing: 0.1em;
+          animation: blink 0.5s infinite alternate;
+        }
+        @keyframes blink {
+          from { opacity: 0.4; }
+          to { opacity: 1; }
+        }
+        .recharging-content {
+          filter: blur(4px);
+          opacity: 0.6;
+          transition: all 0.3s ease;
+          pointer-events: none;
+        }
+        .recharging-active .background-grid {
+          background-size: 21px 21px;
+          opacity: 0.1;
+          transition: all 0.8s ease;
+        }
+      `}</style>
       <div className="background-grid" />
       
-      {/* TOP ROW: Header */}
       <header className="hero-card glass-card">
         <div>
           <p className="eyebrow">AI-Assisted Plant Operations</p>
           <h1>Chiller Energy Optimizer</h1>
-          <p className="hero-copy">
-            Optimize chilled water setpoints with live weather context, operator-friendly controls, and quick energy
-            savings guidance.
-          </p>
+          <p className="hero-copy">Optimize plant efficiency with real-time AI recommendations and granular component control.</p>
         </div>
         <div className="hero-meta">
-          <div className="meta-pill">
-            <span>Local Time</span>
-            <strong>{clock.toLocaleTimeString()}</strong>
-          </div>
-          <div className="meta-pill">
-            <span>Date</span>
-            <strong>{clock.toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' })}</strong>
-          </div>
+          <div className="meta-pill"><span>Local Time</span><strong>{clock.toLocaleTimeString()}</strong></div>
+          <div className="meta-pill"><span>Date</span><strong>{clock.toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' })}</strong></div>
         </div>
       </header>
 
-      {/* NEW LAYOUT: CSS Grid with gap: 1.5rem */}
       <main className="dashboard-grid-redesign">
         
-        {/* ROW 1: 3 Columns */}
         <div className="grid-row row-3-cols">
-          {/* Column 1: LIVE CONDITIONS */}
           <section className="glass-card panel-stack">
             <div className="section-title-row">
-              <div>
-                <p className="section-label">Live Conditions</p>
-                <h2>Clock & Weather</h2>
-              </div>
+              <div><p className="section-label">Live Conditions</p><h2>Clock & Weather</h2></div>
               <span className={`status-pill ${weather.source === 'live' ? 'ok' : 'warn'}`}>
                 {weather.loading ? 'Loading' : weather.source === 'live' ? 'Weather synced' : 'Manual mode'}
               </span>
             </div>
-
             <div className="weather-grid">
-              <MetricCard
-                label="Outdoor Temperature"
-                value={weather.temperature !== null ? `${weather.temperature.toFixed(1)}°C` : '--'}
-                hint={weather.location}
-              />
-              <MetricCard
-                label="Humidity"
-                value={weather.humidity !== null ? `${weather.humidity.toFixed(0)}%` : '--'}
-                hint="Relative humidity"
-              />
-              <MetricCard
-                label="Wet Bulb"
-                value={weather.wetBulb !== null ? `${weather.wetBulb.toFixed(1)}°C` : '--'}
-                hint="Calculated from live weather"
-                accent="#7fe6ff"
-              />
+              <MetricCard label="Outdoor Temp" value={weather.temperature !== null ? `${weather.temperature.toFixed(1)}°C` : '--'} hint={weather.location} />
+              <MetricCard label="Humidity" value={weather.humidity !== null ? `${weather.humidity.toFixed(0)}%` : '--'} />
+              <MetricCard label="Wet Bulb" value={weather.wetBulb !== null ? `${weather.wetBulb.toFixed(1)}°C` : '--'} accent="#7fe6ff" />
             </div>
-
             <div className="weather-actions">
               <label className="toggle-row">
-                <input
-                  type="checkbox"
-                  checked={useWeatherSuggestion}
-                  onChange={(event) => setUseWeatherSuggestion(event.target.checked)}
-                />
-                <span>Auto-apply weather wet bulb suggestion</span>
+                <input type="checkbox" checked={useWeatherSuggestion} onChange={(e) => setUseWeatherSuggestion(e.target.checked)} />
+                <span>Auto-sync wet bulb</span>
               </label>
-              <button
-                type="button"
-                className="secondary-button"
-                onClick={() => weather.wetBulb !== null && updateInput('wet_bulb_c', weather.wetBulb)}
-                disabled={weather.wetBulb === null}
-              >
-                Use Live Wet Bulb
-              </button>
             </div>
-
-            {weather.error ? <p className="inline-note">{weather.error}</p> : null}
           </section>
 
-          {/* Column 2: QUICK SCENARIOS */}
           <section className="glass-card panel-stack">
-            <div className="section-title-row">
-              <div>
-                <p className="section-label">Quick Scenarios</p>
-                <h2>Preset Operating Modes</h2>
-              </div>
-            </div>
+            <div className="section-title-row"><div><p className="section-label">Quick Scenarios</p><h2>Presets</h2></div></div>
             <div className="preset-grid">
-              {scenarioPresets.map((preset) => (
-                <button key={preset.label} type="button" className="preset-card" onClick={() => applyPreset(preset.values)}>
-                  <span>{preset.icon}</span>
-                  <strong>{preset.label}</strong>
-                  <small>
-                    {preset.values.load_tons} tons · {monthOptions[preset.values.month - 1]}
-                  </small>
+              {scenarioPresets.map(p => (
+                <button key={p.label} className="preset-card" onClick={() => setInputs(p.values)}>
+                  <span>{p.icon}</span><strong>{p.label}</strong>
+                  <small>{p.values.load_tons} tons</small>
                 </button>
               ))}
             </div>
           </section>
 
-          {/* Column 3: SYSTEM STATUS (NEW) */}
           <SystemStatusCard 
-            chillersRunning={inputs.chillers_running} 
+            chillersRunning={inputs.CHL_STA_1 + inputs.CHL_STA_2 + inputs.CHL_STA_3} 
             efficiency={result?.result?.currentEfficiency ?? 0.72} 
             faultCount={0} 
           />
         </div>
 
-        {/* ROW 2: 2 Columns */}
         <div className="grid-row row-2-cols">
-          {/* Column 1: OPTIMIZATION INPUTS */}
           <section className="glass-card panel-stack input-panel">
             <div className="section-title-row">
-              <div>
-                <p className="section-label">Optimization Inputs</p>
-                <h2>Current Operating Point</h2>
-              </div>
-              <button type="button" className="primary-button" onClick={runOptimization} disabled={loading}>
-                {loading ? 'Calculating...' : 'Get Recommendation'}
-              </button>
+              <div><p className="section-label">Baseline Inputs</p><h2>Current Operation</h2></div>
+              <button className="primary-button" onClick={runOptimization} disabled={loading}>{loading ? 'Calculating...' : 'Get Recommendation'}</button>
             </div>
-
             <div className="inputs-grid">
-              <RangeField
-                label="Cooling Load"
-                name="load_tons"
-                value={inputs.load_tons}
-                min={200}
-                max={2500}
-                step={10}
-                suffix=" tons"
-                onChange={updateInput}
-              />
-              <RangeField
-                label="Wet Bulb Temp"
-                name="wet_bulb_c"
-                value={inputs.wet_bulb_c}
-                min={-5}
-                max={35}
-                step={0.1}
-                suffix="°C"
-                onChange={updateInput}
-              />
-              <RangeField
-                label="Current CHW Setpoint"
-                name="current_chw_setpoint_c"
-                value={inputs.current_chw_setpoint_c}
-                min={5}
-                max={10}
-                step={0.1}
-                suffix="°C"
-                onChange={updateInput}
-              />
-              <RangeField
-                label="Current Limit"
-                name="current_limit_pct"
-                value={inputs.current_limit_pct}
-                min={50}
-                max={100}
-                step={1}
-                suffix="%"
-                onChange={updateInput}
-              />
-            </div>
-
-            <div className="compact-grid">
+              <RangeField label="Cooling Load" name="load_tons" value={inputs.load_tons} min={200} max={2500} step={10} suffix=" tons" onChange={updateInput} />
+              <RangeField label="Wet Bulb" name="wet_bulb_c" value={inputs.wet_bulb_c} min={-5} max={35} step={0.1} suffix="°C" onChange={updateInput} />
+              <RangeField label="Current Limit" name="current_limit_pct" value={inputs.current_limit_pct} min={50} max={100} step={1} suffix="%" onChange={updateInput} />
               <label className="field-card">
-                <div className="field-heading">
-                  <span>Hour</span>
-                  <strong>{inputs.hour}:00</strong>
-                </div>
-                <input
-                  className="number-input"
-                  type="number"
-                  min={0}
-                  max={23}
-                  value={inputs.hour}
-                  onChange={(event) => updateInput('hour', Number(event.target.value))}
-                />
-              </label>
-
-              <label className="field-card">
-                <div className="field-heading">
-                  <span>Month</span>
-                </div>
-                <select value={inputs.month} onChange={(event) => updateInput('month', Number(event.target.value))}>
-                  {monthOptions.map((month, index) => (
-                    <option key={month} value={index + 1}>
-                      {month}
-                    </option>
-                  ))}
+                <div className="field-heading"><span>Chillers Running</span><strong>{inputs.chillers_running}</strong></div>
+                <select value={inputs.chillers_running} onChange={(e) => updateInput('chillers_running', Number(e.target.value))}>
+                  {[1,2,3,4].map(n => <option key={n} value={n}>{n} Chillers</option>)}
                 </select>
               </label>
-
-              <div className="field-card">
-                <div className="field-heading">
-                  <span>Weekend</span>
-                  <strong>{inputs.is_weekend ? 'Yes' : 'No'}</strong>
-                </div>
-                <div className="toggle-group">
-                  <button
-                    type="button"
-                    className={inputs.is_weekend ? 'choice-button' : 'choice-button active'}
-                    onClick={() => updateInput('is_weekend', 0)}
-                  >
-                    No
-                  </button>
-                  <button
-                    type="button"
-                    className={inputs.is_weekend ? 'choice-button active' : 'choice-button'}
-                    onClick={() => updateInput('is_weekend', 1)}
-                  >
-                    Yes
-                  </button>
-                </div>
-              </div>
-
-              <div className="field-card">
-                <div className="field-heading">
-                  <span>Chillers Running</span>
-                  <strong>{inputs.chillers_running}</strong>
-                </div>
-                <div className="toggle-group">
-                  {[1, 2, 3, 4].map((count) => (
-                    <button
-                      key={count}
-                      type="button"
-                      className={count === inputs.chillers_running ? 'choice-button active' : 'choice-button'}
-                      onClick={() => updateInput('chillers_running', count)}
-                    >
-                      {count}
-                    </button>
-                  ))}
-                </div>
+            </div>
+            <div className="advanced-baseline-section">
+              <p className="section-label" style={{ marginTop: '20px' }}>Baseline Chiller Settings</p>
+              <div className="chiller-baseline-grid">
+                {[1, 2, 3].map(id => <ChillerBaselineControl key={id} id={id} inputs={inputs} onChange={updateInput} />)}
               </div>
             </div>
-
-            {error ? <p className="error-banner">{error}</p> : null}
           </section>
 
-          {/* Column 2: OPTIMIZATION OUTPUT */}
-          <section className="glass-card panel-stack result-panel print-surface">
+          <section className="glass-card panel-stack result-panel">
             <div className="section-title-row">
-              <div>
-                <p className="section-label">Optimization Output</p>
-                <h2>Recommendation Summary</h2>
-              </div>
-              <span className="status-pill" style={{ backgroundColor: `${status.color}22`, color: status.color }}>
-                {status.label}
-              </span>
+              <div><p className="section-label">Optimization Output</p><h2>AI Recommendations</h2></div>
+              {recharging && <span className="recharging-indicator">⚡ RECHARGING...</span>}
+              <span className="status-pill" style={{ backgroundColor: `${statusTone.color}22`, color: statusTone.color }}>{statusTone.label}</span>
             </div>
-
-            {loading ? (
-              <div className="loading-state">
-                <div className="spinner" />
-                <p>Calling optimization engine and preparing operator guidance.</p>
-              </div>
-            ) : result ? (
-              <>
+            {result ? (
+              <div className={recharging ? 'recharging-content' : ''}>
                 <div className="result-grid">
                   <div className="gauge-card">
                     <div className="gauge-shell" style={buildGaugeStyle(result.result.currentEfficiency)}>
-                      <div className="gauge-core">
-                        <span>Current</span>
-                        <strong>{result.result.currentEfficiency.toFixed(3)}</strong>
-                        <small>kW/ton</small>
-                      </div>
-                    </div>
-                    <div className="gauge-legend">
-                      <span>Green &lt; 0.65</span>
-                      <span>Yellow 0.65-0.75</span>
-                      <span>Orange 0.75-0.85</span>
-                      <span>Red &gt; 0.85</span>
+                      <div className="gauge-core"><span>Current</span><strong>{result.result.currentEfficiency.toFixed(3)}</strong><small>kW/ton</small></div>
                     </div>
                   </div>
-
                   <div className="metrics-grid">
-                    <MetricCard
-                      label="Current Total Power"
-                      value={`${result.result.currentTotalPower.toFixed(0)} kW`}
-                      hint="Total plant power draw"
-                      accent="#ff6b7d"
-                    />
-                    <MetricCard
-                      label="Optimal Total Power"
-                      value={`${result.result.optimalTotalPower.toFixed(0)} kW`}
-                      hint="Total draw if optimized"
-                      accent="#4be4a4"
-                    />
-                    <MetricCard
-                      label="Optimal Efficiency"
-                      value={`${result.result.optimalEfficiency.toFixed(3)} kW/ton`}
-                      hint="Predicted optimized condition"
-                      accent="#81f5b6"
-                    />
-                    <MetricCard
-                      label="Improvement"
-                      value={`↑ ${result.result.improvementPercent.toFixed(1)}%`}
-                      hint="Efficiency gain"
-                      accent="#53f2a8"
-                    />
-                    <MetricCard
-                      label="Power Savings"
-                      value={`${result.result.powerSavedKw.toFixed(1)} kW`}
-                      hint={formatCurrency(result.result.costSavingsUsd)}
-                      accent="#7fe6ff"
-                    />
-                    <MetricCard
-                      label="CO2 Reduction"
-                      value={`${result.result.co2ReductionKg.toFixed(1)} kg`}
-                      hint="Estimated avoided emissions"
-                      accent="#f7df72"
-                    />
+                    <MetricCard label="Current Power" value={`${result.result.currentTotalPower.toFixed(0)} kW`} accent="#ff6b7d" />
+                    <MetricCard label="Optimal Power" value={`${result.result.optimalTotalPower.toFixed(0)} kW`} accent="#4be4a4" />
+                    <MetricCard label="Improvement" value={`${result.result.improvementPercent.toFixed(1)}%`} accent="#53f2a8" />
+                    <MetricCard label="Power Saved" value={`${result.result.powerSavedKw.toFixed(1)} kW`} accent="#7fe6ff" />
                   </div>
                 </div>
-
-                <div className="recommendation-banner">
-                  <div>
-                    <p className="section-label">Recommended Configuration</p>
-                    <h3>
-                      {result.result.recommendedChillers} chillers @ {result.result.recommendedSetpoint.toFixed(1)}°C
-                    </h3>
-                    <small style={{ color: '#7fe6ff', marginTop: '0.5rem', display: 'block' }}>
-                      Current: {result.inputs.chillers_running} chillers @ {result.inputs.current_chw_setpoint_c.toFixed(1)}°C
-                    </small>
-                  </div>
-                  <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center' }}>
-                    <div style={{ textAlign: 'right' }}>
-                      <p style={{ fontSize: '0.875rem', color: '#a0aec0', margin: '0 0 0.25rem 0' }}>Energy Savings</p>
-                      <strong style={{ fontSize: '1.5rem', color: '#53f2a8' }}>
-                        {result.result.powerSavedKw.toFixed(1)} kW
-                      </strong>
-                    </div>
-                    <button type="button" className="secondary-button" onClick={() => window.print()}>
-                      Export as PDF
-                    </button>
-                  </div>
+                <div className="action-card"><p className="section-label">Operator Action</p><p>{result.result.operatorAction}</p></div>
+                <div className="optimized-table-container">
+                   <p className="section-label">Recommended Component Setpoints</p>
+                   <table className="optimized-settings-table">
+                     <thead><tr><th>Unit</th><th>Speed</th><th>Fan</th><th>Flow</th></tr></thead>
+                     <tbody>
+                       {[1, 2, 3].map(id => {
+                         const s = result.result.recommended_settings;
+                         if (s[`CHL_STA_${id}`] !== 1) return null;
+                         return (
+                           <tr key={id}>
+                             <td>Chiller {id}</td>
+                             <td>{s[`CHL_COMP_SPD_CTRL_${id}`]}%</td>
+                             <td>{s[`CT_FAN_SPD_CTRL_${id}`]}%</td>
+                             <td>{s[`CHL_CD_FLOW_${id}`]} GPM</td>
+                           </tr>
+                         );
+                       })}
+                     </tbody>
+                   </table>
                 </div>
-
-                <div className="action-card">
-                  <p className="section-label">Operator Action</p>
-                  <p>{result.result.operatorAction}</p>
-                </div>
-              </>
-            ) : (
-              <div className="empty-state">
-                <p>No recommendation yet.</p>
-                <span>Run the optimizer to see efficiency targets, savings, and the recommended OptiView action.</span>
               </div>
-            )}
+            ) : <div className="empty-state"><p>No recommendation yet. Run the optimizer to see energy savings guidance.</p></div>}
+            {error && <p className="error-banner">{error}</p>}
           </section>
         </div>
 
-        {/* ROW 2.5: CHILLER STAGING OPTIMIZATION */}
-        {chillerOptimization && (
-          <div className="grid-row row-2-cols">
-            <section className="glass-card panel-stack">
-              <div className="section-title-row">
-                <div>
-                  <p className="section-label">Current Configuration</p>
-                  <h2>Active Chillers</h2>
-                </div>
-              </div>
-              <div className="weather-grid">
-                <MetricCard
-                  label="Chillers Running"
-                  value={`${chillerOptimization.currentConfig.chillers.join(', ')}`}
-                  hint="Current active units"
-                  accent="#7fe6ff"
-                />
-                <MetricCard
-                  label="Current Setpoint"
-                  value={`${chillerOptimization.currentConfig.setpoint.toFixed(1)}°C`}
-                  hint="CHW temperature"
-                  accent="#f7df72"
-                />
-                <MetricCard
-                  label="Current kW/TR"
-                  value={`${chillerOptimization.currentConfig.kwPerTr.toFixed(3)}`}
-                  hint="Efficiency metric"
-                  accent="#ff9f5a"
-                />
-                <MetricCard
-                  label="Current Power"
-                  value={`${chillerOptimization.currentConfig.totalPower.toFixed(0)} kW`}
-                  hint="Total power draw"
-                  accent="#ff6b7d"
-                />
-              </div>
-            </section>
-
-            <section className="glass-card panel-stack">
-              <div className="section-title-row">
-                <div>
-                  <p className="section-label">Optimal Configuration</p>
-                  <h2>Recommended Staging</h2>
-                </div>
-                <span className="status-pill" style={{ backgroundColor: chillerOptimization.powerSaved > 0 ? '#53f2a822' : '#ff6b7d22', color: chillerOptimization.powerSaved > 0 ? '#53f2a8' : '#ff6b7d' }}>
-                  {chillerOptimization.powerSaved > 0 ? '✓ Savings' : '✗ No Savings'}
-                </span>
-              </div>
-              <div className="weather-grid">
-                <MetricCard
-                  label="Recommended Chillers"
-                  value={`${chillerOptimization.optimalConfig.chillers.join(', ')}`}
-                  hint="Optimal active units"
-                  accent="#53f2a8"
-                />
-                <MetricCard
-                  label="Recommended Setpoint"
-                  value={`${chillerOptimization.optimalConfig.setpoint.toFixed(1)}°C`}
-                  hint="Optimal CHW temperature"
-                  accent="#81f5b6"
-                />
-                <MetricCard
-                  label="Expected kW/TR"
-                  value={`${chillerOptimization.optimalConfig.kwPerTr.toFixed(3)}`}
-                  hint="Optimized efficiency"
-                  accent="#8ef5bf"
-                />
-                <MetricCard
-                  label="Expected Power"
-                  value={`${chillerOptimization.optimalConfig.totalPower.toFixed(0)} kW`}
-                  hint="Optimized power draw"
-                  accent="#4be4a4"
-                />
-              </div>
-            </section>
-          </div>
-        )}
-
-        {chillerOptimization && chillerOptimization.powerSaved > 0 && (
-          <div className="grid-row row-full">
-            <section className="glass-card panel-stack">
-              <div className="section-title-row">
-                <div>
-                  <p className="section-label">Chiller Staging Savings</p>
-                  <h2>Optimization Potential</h2>
-                </div>
-              </div>
-              <div className="weather-grid">
-                <MetricCard
-                  label="Power Saved"
-                  value={`${chillerOptimization.powerSaved.toFixed(1)} kW`}
-                  hint="Reduction in power draw"
-                  accent="#53f2a8"
-                />
-                <MetricCard
-                  label="Improvement"
-                  value={`${chillerOptimization.improvementPercent.toFixed(1)}%`}
-                  hint="Efficiency gain"
-                  accent="#81f5b6"
-                />
-                <MetricCard
-                  label="Cost Savings/Hour"
-                  value={`$${chillerOptimization.costSavingsPerHour.toFixed(2)}`}
-                  hint="Hourly cost reduction"
-                  accent="#7fe6ff"
-                />
-                <MetricCard
-                  label="CO2 Reduction/Hour"
-                  value={`${chillerOptimization.co2ReductionPerHour.toFixed(1)} kg`}
-                  hint="Avoided emissions"
-                  accent="#f7df72"
-                />
-              </div>
-            </section>
-          </div>
-        )}
-
-        {/* ROW 3: Full Width - LOCAL HISTORY */}
         <div className="grid-row row-full">
-          <section className="glass-card panel-stack history-panel">
-            <div className="section-title-row">
-              <div>
-                <p className="section-label">Optimization History</p>
-                <h2>Last 20 Recommendations</h2>
-              </div>
-              <div className="button-row">
-                <button type="button" className="secondary-button" onClick={exportCsv} disabled={!history.length}>
-                  Export CSV
-                </button>
-                <button type="button" className="ghost-button" onClick={clearHistory} disabled={!history.length}>
-                  Clear History
-                </button>
-              </div>
+          <section className="glass-card panel-stack">
+            <div className="section-title-row"><h2>History</h2></div>
+            <div className="history-list">
+              {history.map(item => (
+                <div key={item.id} className="history-item">
+                  <div><strong>{new Date(item.timestamp).toLocaleTimeString()}</strong><small>Load: {item.inputs.load_tons} tons</small></div>
+                  <div className="history-metrics">
+                    <strong style={{ color: '#53f2a8' }}>{item.result.powerSavedKw.toFixed(1)} kW saved</strong>
+                  </div>
+                </div>
+              ))}
             </div>
-
-            {history.length ? (
-              <div className="history-list">
-                {history.map((item) => (
-                  <button key={item.id} type="button" className="history-item" onClick={() => restoreHistoryItem(item)}>
-                    <div>
-                      <strong>{formatTimestamp(item.timestamp)}</strong>
-                      <span>
-                        Load {item.inputs.load_tons} tons · {item.inputs.chillers_running} → {item.result.recommendedChillers} chillers
-                      </span>
-                    </div>
-                    <div className="history-metrics">
-                      <span>
-                        {item.result.currentEfficiency.toFixed(3)} → {item.result.optimalEfficiency.toFixed(3)} kW/ton
-                      </span>
-                      <strong style={{ color: item.result.powerSavedKw > 0 ? '#53f2a8' : '#a0aec0' }}>
-                        {item.result.powerSavedKw.toFixed(1)} kW saved
-                      </strong>
-                    </div>
-                  </button>
-                ))}
-              </div>
-            ) : (
-              <div className="empty-state">
-                <p>History is empty.</p>
-                <span>Completed recommendations will be stored in the database and displayed here.</span>
-              </div>
-            )}
           </section>
         </div>
-
       </main>
     </div>
   );

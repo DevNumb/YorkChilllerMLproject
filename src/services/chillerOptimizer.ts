@@ -1,30 +1,40 @@
 /**
- * York Chiller Optimizer - Frontend-Only Optimization Engine
- * Calls the Hugging Face /predict endpoint directly and performs scenario searching in JS.
+ * York Chiller Optimizer - 18-Feature Gradio API Integration
+ * Fixed to call the real API at: https://DevNumb-randomforestmodel.hf.space/gradio_api/call/predict
  */
 
-const OPTIMIZER_URL = 'https://DevNumb-MLYorkchillerOptimzer.hf.space/predict';
+const API_BASE_URL = 'https://DevNumb-randomforestmodel.hf.space/gradio_api/call/predict';
 
-export interface PredictionInput {
-  total_building_load: number;
-  avg_chilled_water_rate: number;
-  avg_cooling_water_temp: number;
-  avg_outside_temp: number;
-  avg_dew_point: number;
-  avg_humidity: number;
-  avg_wind_speed: number;
-  avg_pressure: number;
-  hour: number;
-  day_of_week: number;
-  month: number;
-  day_of_year: number;
+export interface PredictionInput18 {
+  OA_TEMP: number;
+  OA_TEMP_WB: number;
+  Hour: number;
+  Weekday: number;
+  Month: number;
+  CHL_STA_1: number;
+  CHL_STA_2: number;
+  CHL_STA_3: number;
+  CHL_COMP_SPD_CTRL_1: number;
+  CHL_COMP_SPD_CTRL_2: number;
+  CHL_COMP_SPD_CTRL_3: number;
+  CT_FAN_SPD_CTRL_1: number;
+  CT_FAN_SPD_CTRL_2: number;
+  CT_FAN_SPD_CTRL_3: number;
+  CHL_CD_FLOW_1: number;
+  CHL_CD_FLOW_2: number;
+  CHL_CD_FLOW_3: number;
+  CWL_SEC_LOAD: number;
 }
 
 export interface OptimalConfiguration {
   chillers: number[];
-  setpoint: number;
+  speeds: number[];
+  fans: number[];
+  flows: number[];
   kwPerTr: number;
   totalPower: number;
+  setpoint: number;
+  settings: PredictionInput18;
 }
 
 export interface SavingsResult {
@@ -37,217 +47,342 @@ export interface SavingsResult {
 }
 
 /**
- * Ensures inputs pass the remote ML model's strict validation rules.
+ * CORRECT API INTEGRATION - POST to submit, GET to retrieve
  */
-function buildValidatedPayload(
-  load: number,
-  wetBulb: number,
-  setpoint: number,
-  hour: number,
-  month: number,
-  weekend: number,
-  activeChillers: number
-): PredictionInput {
-  // Clamping to satisfy model thresholds (observed from 422 errors)
-  const modelLoad = Math.max(load, 401); // Load must be >= 400
-  const rawRate = (modelLoad / activeChillers);
-  const avgChilledWaterRate = rawRate < 200 ? 200 : (rawRate > 1000 ? 1000 : rawRate); // Rate must be >= 200
-  const avgCoolingWaterTemp = Math.max(setpoint + 20, 20); // Temp must be >= 15
-  
-  // Weather proxies
-  const avgOutsideTemp = Math.max(wetBulb * 1.5 + 52, 40);
-  const avgDewPoint = Math.max(wetBulb * 1.35 + 35, 20);
-  const avgHumidity = Math.min(Math.max(72 - (avgOutsideTemp - avgDewPoint) * 0.6, 20), 100);
+async function callPredictionAPI(features18Array: number[]): Promise<number> {
+  try {
+    console.log('[API] Sending POST request with features:', features18Array);
 
-  return {
-    total_building_load: Number(modelLoad.toFixed(1)),
-    avg_chilled_water_rate: Number(avgChilledWaterRate.toFixed(1)),
-    avg_cooling_water_temp: Number(avgCoolingWaterTemp.toFixed(1)),
-    avg_outside_temp: Number(avgOutsideTemp.toFixed(1)),
-    avg_dew_point: Number(avgDewPoint.toFixed(1)),
-    avg_humidity: Number(avgHumidity.toFixed(1)),
-    avg_wind_speed: Number((6 + activeChillers * 1.2).toFixed(1)),
-    avg_pressure: 29.92,
-    hour: Math.min(Math.max(hour, 0), 23),
-    day_of_week: weekend ? 0 : 1,
-    month: Math.min(Math.max(month, 1), 12),
-    day_of_year: Math.min(Math.max((month - 1) * 30 + 15, 1), 365),
-  };
-}
+    // Step 1: POST to get event_id
+    // URL: /gradio_api/call/predict (NO trailing slash)
+    const postResponse = await fetch(API_BASE_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ data: features18Array })
+    });
 
-/**
- * Makes a single JSON POST request to the prediction API with retry logic.
- */
-async function callPredictApi(payload: PredictionInput, retries = 2): Promise<number | null> {
-  for (let i = 0; i <= retries; i++) {
-    try {
-      const response = await fetch(OPTIMIZER_URL, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-        signal: AbortSignal.timeout(60000),
-      });
-
-      if (response.ok) {
-        const data = await response.json();
-        const kw = data.kw_per_tr;
-        console.log(`[API] Chillers: ${Math.round(payload.total_building_load / payload.avg_chilled_water_rate)}, Rate: ${payload.avg_chilled_water_rate}, Setpoint: ${payload.avg_cooling_water_temp - 20} → kW/TR: ${kw}`);
-        return (typeof kw === 'number' && kw > 0) ? kw : null;
-      } else if (response.status === 429) {
-        const wait = 2000 * (i + 1);
-        console.warn(`[Predict API] Rate limited (429). Retrying in ${wait}ms...`);
-        await new Promise(resolve => setTimeout(resolve, wait));
-        continue;
-      } else {
-        const error = await response.text();
-        console.error(`[Predict API] Failed (${response.status}):`, error, payload);
-        return null;
-      }
-    } catch (err: any) {
-      if (err.name === 'TimeoutError' && i < retries) {
-        const wait = 1000 * (i + 1);
-        console.warn(`[Predict API] Timeout. Retrying in ${wait}ms... (Attempt ${i + 1}/${retries})`);
-        await new Promise(resolve => setTimeout(resolve, wait));
-        continue;
-      }
-      console.error('[Predict API] Request error:', err);
-      return null;
+    if (!postResponse.ok) {
+      throw new Error(`POST failed: ${postResponse.status}`);
     }
+
+    // POST response is JSON
+    const postData = await postResponse.json();
+    console.log('[API] POST response:', postData);
+    const { event_id } = postData;
+
+    if (!event_id) {
+      throw new Error('No event_id in POST response');
+    }
+
+    console.log('[API] Got event_id:', event_id);
+
+    // Step 2: Wait 2 seconds for processing
+    await new Promise(resolve => setTimeout(resolve, 2000));
+
+    // Step 3: GET the result
+    // URL: /gradio_api/call/predict/{event_id}
+    const getUrl = `${API_BASE_URL}/${event_id}`;
+    console.log('[API] Sending GET request to:', getUrl);
+
+    const getResponse = await fetch(getUrl);
+
+    if (!getResponse.ok) {
+      throw new Error(`GET failed: ${getResponse.status}`);
+    }
+
+    // GET response is SSE (starts with "event: complete")
+    const text = await getResponse.text();
+    console.log('[API] GET response (first 500 chars):', text.substring(0, 500));
+
+    // Step 4: Extract prediction from SSE format
+    // Data format: data: ["**Prediction:** 186.32"]
+    const dataMatch = text.match(/data:\s*\["([^"]+)"\]/);
+    const powerText = dataMatch ? dataMatch[1] : text;
+    console.log('[API] Extracted power text:', powerText);
+
+    const powerMatch = powerText.match(/\*\*Prediction:\*\*\s*(\d+\.?\d*)/);
+    const power = powerMatch ? parseFloat(powerMatch[1]) : null;
+
+    console.log('[API] Parsed power value:', power);
+
+    if (power === null) {
+      throw new Error(`Could not parse power from SSE response: ${text.substring(0, 200)}`);
+    }
+
+    return power;
+  } catch (error) {
+    console.error('[API] Call failed:', error);
+    throw error;
   }
-  return null;
 }
 
 /**
- * Main optimization entry point called by the Dashboard.
- * Loops through scenarios and picks the best one with comfort zone constraint.
+ * Builds the 18-parameter array for the API.
+ */
+function buildFeaturesFromState(state: PredictionInput18): number[] {
+  return [
+    state.OA_TEMP || 30.0,
+    state.OA_TEMP_WB || 20.0,
+    state.Hour || 14,
+    state.Weekday || 3,
+    state.Month || 7,
+    state.CHL_STA_1,
+    state.CHL_STA_2,
+    state.CHL_STA_3,
+    state.CHL_COMP_SPD_CTRL_1,
+    state.CHL_COMP_SPD_CTRL_2,
+    state.CHL_COMP_SPD_CTRL_3,
+    state.CT_FAN_SPD_CTRL_1,
+    state.CT_FAN_SPD_CTRL_2,
+    state.CT_FAN_SPD_CTRL_3,
+    state.CHL_CD_FLOW_1,
+    state.CHL_CD_FLOW_2,
+    state.CHL_CD_FLOW_3,
+    state.CWL_SEC_LOAD
+  ];
+}
+
+/**
+ * Comfort Zone Constraints - Safe Operating Ranges
+ */
+const COMFORT_ZONE = {
+  CHW_SETPOINT_MIN: 5.0,
+  CHW_SETPOINT_MAX: 10.0,
+  COMPRESSOR_SPEED_MIN: 30,
+  COMPRESSOR_SPEED_MAX: 100,
+  FAN_SPEED_MIN: 20,
+  FAN_SPEED_MAX: 100,
+  FLOW_MIN: 150,
+  FLOW_MAX: 350,
+  MIN_CHILLERS_RUNNING: 1,
+};
+
+function isWithinComfortZone(config: PredictionInput18, setpoint: number): boolean {
+  // Check setpoint
+  if (setpoint < COMFORT_ZONE.CHW_SETPOINT_MIN || setpoint > COMFORT_ZONE.CHW_SETPOINT_MAX) {
+    return false;
+  }
+
+  // Check that at least one chiller is running if there's load
+  const chillersRunning = config.CHL_STA_1 + config.CHL_STA_2 + config.CHL_STA_3;
+  if (chillersRunning < COMFORT_ZONE.MIN_CHILLERS_RUNNING && config.CWL_SEC_LOAD > 100) {
+    return false;
+  }
+
+  // Check compressor speeds (only for running chillers)
+  if (config.CHL_STA_1 === 1 && (config.CHL_COMP_SPD_CTRL_1 < COMFORT_ZONE.COMPRESSOR_SPEED_MIN || config.CHL_COMP_SPD_CTRL_1 > COMFORT_ZONE.COMPRESSOR_SPEED_MAX)) {
+    return false;
+  }
+  if (config.CHL_STA_2 === 1 && (config.CHL_COMP_SPD_CTRL_2 < COMFORT_ZONE.COMPRESSOR_SPEED_MIN || config.CHL_COMP_SPD_CTRL_2 > COMFORT_ZONE.COMPRESSOR_SPEED_MAX)) {
+    return false;
+  }
+  if (config.CHL_STA_3 === 1 && (config.CHL_COMP_SPD_CTRL_3 < COMFORT_ZONE.COMPRESSOR_SPEED_MIN || config.CHL_COMP_SPD_CTRL_3 > COMFORT_ZONE.COMPRESSOR_SPEED_MAX)) {
+    return false;
+  }
+
+  // Check fan speeds (only for running chillers)
+  if (config.CHL_STA_1 === 1 && (config.CT_FAN_SPD_CTRL_1 < COMFORT_ZONE.FAN_SPEED_MIN || config.CT_FAN_SPD_CTRL_1 > COMFORT_ZONE.FAN_SPEED_MAX)) {
+    return false;
+  }
+  if (config.CHL_STA_2 === 1 && (config.CT_FAN_SPD_CTRL_2 < COMFORT_ZONE.FAN_SPEED_MIN || config.CT_FAN_SPD_CTRL_2 > COMFORT_ZONE.FAN_SPEED_MAX)) {
+    return false;
+  }
+  if (config.CHL_STA_3 === 1 && (config.CT_FAN_SPD_CTRL_3 < COMFORT_ZONE.FAN_SPEED_MIN || config.CT_FAN_SPD_CTRL_3 > COMFORT_ZONE.FAN_SPEED_MAX)) {
+    return false;
+  }
+
+  // Check flows (only for running chillers)
+  if (config.CHL_STA_1 === 1 && (config.CHL_CD_FLOW_1 < COMFORT_ZONE.FLOW_MIN || config.CHL_CD_FLOW_1 > COMFORT_ZONE.FLOW_MAX)) {
+    return false;
+  }
+  if (config.CHL_STA_2 === 1 && (config.CHL_CD_FLOW_2 < COMFORT_ZONE.FLOW_MIN || config.CHL_CD_FLOW_2 > COMFORT_ZONE.FLOW_MAX)) {
+    return false;
+  }
+  if (config.CHL_STA_3 === 1 && (config.CHL_CD_FLOW_3 < COMFORT_ZONE.FLOW_MIN || config.CHL_CD_FLOW_3 > COMFORT_ZONE.FLOW_MAX)) {
+    return false;
+  }
+
+  return true;
+}
+
+/**
+ * Main optimization entry point with HYPERPARAMETER SEARCH.
  */
 export async function calculateSavings(
   load: number,
   wetBulb: number,
   hour: number,
   month: number,
-  weekend: number,
-  limit: number,
-  currentChillers: number[] | number,
-  currentSetpoint: number,
-  fastMode = false
+  weekday: number,
+  oaTemp: number,
+  currentSettings: PredictionInput18
 ): Promise<SavingsResult | null> {
-  // Fix: Correctly interpret current chiller count from input
-  let currentCount: number;
-  if (Array.isArray(currentChillers)) {
-    if (currentChillers.length === 1 && currentChillers[0] >= 1 && currentChillers[0] <= 4) {
-      currentCount = currentChillers[0];
-    } else {
-      currentCount = currentChillers.length;
+  try {
+    // 1. Get Baseline Power from API
+    const currentFeatures = buildFeaturesFromState(currentSettings);
+    console.log('[Optimizer] Fetching baseline power from API...');
+    let currentTotalPower: number;
+
+    try {
+      currentTotalPower = await callPredictionAPI(currentFeatures);
+      console.log('[Optimizer] Baseline power from API:', currentTotalPower);
+    } catch (apiError) {
+      console.error('[Optimizer] API call failed, cannot proceed:', apiError);
+      throw new Error('Failed to get baseline power from API: ' + (apiError as Error).message);
     }
-  } else {
-    currentCount = currentChillers;
-  }
 
-  // 1. Get Baseline
-  const currentPayload = buildValidatedPayload(load, wetBulb, currentSetpoint, hour, month, weekend, currentCount);
-  const currentKwPerTr = await callPredictApi(currentPayload) || 0.6;
-  const currentTotalPower = load * currentKwPerTr;
+    // Efficiency (kW/ton) = Total Power (kW) / Load (tons)
+    const currentKwPerTr = load > 0 ? currentTotalPower / load : 0;
 
-  // 2. Generate Scenarios with comfort zone constraint (±1°C from current setpoint)
-  // Try all 4 chiller combinations with setpoints within comfort zone
-  const comfortMin = Math.max(currentSetpoint - 1.0, 5.0);
-  const comfortMax = Math.min(currentSetpoint + 1.0, 10.0);
+    // 2. Define Hyperparameter Search Space (within comfort zone)
+    const stagings = [
+      [1, 0, 0], [0, 1, 0], [0, 0, 1], // 1 Chiller options
+      [1, 1, 0], [1, 0, 1], [0, 1, 1], // 2 Chiller options
+      [1, 1, 1]                      // 3 Chiller options
+    ];
 
-  // Generate setpoints in 0.5°C increments within comfort zone
-  const setpoints: number[] = [];
-  for (let sp = comfortMin; sp <= comfortMax; sp += 0.5) {
-    setpoints.push(Number(sp.toFixed(1)));
-  }
+    // Control levels for search (Speed %, Fan %, Flow GPM) - reduced for faster execution
+    const controlLevels = [
+      { spd: 40, fan: 30, flow: 180 },
+      { spd: 60, fan: 50, flow: 240 },
+      { spd: 80, fan: 70, flow: 300 },
+      { spd: 100, fan: 100, flow: 350 }
+    ];
 
-  // Try all 4 chiller combinations
-  const stagings = [1, 2, 3, 4];
+    const scenarios: PredictionInput18[] = [];
+    const setpoint = 6.5; // Standard setpoint within comfort zone
 
-  const scenarios: { count: number, setpoint: number, payload: PredictionInput }[] = [];
-  const seen = new Set();
+    for (const stage of stagings) {
+      for (const ctrl of controlLevels) {
+        const scenario: PredictionInput18 = {
+          OA_TEMP: oaTemp,
+          OA_TEMP_WB: wetBulb,
+          Hour: hour,
+          Weekday: weekday,
+          Month: month,
+          CHL_STA_1: stage[0],
+          CHL_STA_2: stage[1],
+          CHL_STA_3: stage[2],
+          CHL_COMP_SPD_CTRL_1: stage[0] ? ctrl.spd : 0,
+          CHL_COMP_SPD_CTRL_2: stage[1] ? ctrl.spd : 0,
+          CHL_COMP_SPD_CTRL_3: stage[2] ? ctrl.spd : 0,
+          CT_FAN_SPD_CTRL_1: stage[0] ? ctrl.fan : 0,
+          CT_FAN_SPD_CTRL_2: stage[1] ? ctrl.fan : 0,
+          CT_FAN_SPD_CTRL_3: stage[2] ? ctrl.fan : 0,
+          CHL_CD_FLOW_1: stage[0] ? ctrl.flow : 0,
+          CHL_CD_FLOW_2: stage[1] ? ctrl.flow : 0,
+          CHL_CD_FLOW_3: stage[2] ? ctrl.flow : 0,
+          CWL_SEC_LOAD: load
+        };
 
-  for (const count of stagings) {
-    for (const sp of setpoints) {
-      const key = `${count}-${sp}`;
-      if (seen.has(key)) continue;
-      seen.add(key);
-
-      scenarios.push({
-        count,
-        setpoint: sp,
-        payload: buildValidatedPayload(load, wetBulb, sp, hour, month, weekend, count)
-      });
-    }
-  }
-
-  // 3. Call API in batches
-  const batchSize = 4;
-  const results: { count: number, setpoint: number, kwPerTr: number, totalPower: number }[] = [];
-
-  console.log(`[Optimizer] Searching ${scenarios.length} scenarios within comfort zone [${comfortMin}°C - ${comfortMax}°C]...`);
-
-  for (let i = 0; i < scenarios.length; i += batchSize) {
-    const batch = scenarios.slice(i, i + batchSize);
-    const batchPromises = batch.map(async (s) => {
-      const kw = await callPredictApi(s.payload);
-      if (kw !== null) {
-        const totalPower = load * kw;
-        return { count: s.count, setpoint: s.setpoint, kwPerTr: kw, totalPower };
+        // Only add scenarios within comfort zone
+        if (isWithinComfortZone(scenario, setpoint)) {
+          scenarios.push(scenario);
+        }
       }
-      return null;
+    }
+
+    // 3. Run all scenarios through the API
+    // We use a simple batching to avoid hitting API limits too hard
+    const results: OptimalConfiguration[] = [];
+    const batchSize = 5;
+
+    for (let i = 0; i < scenarios.length; i += batchSize) {
+      const batch = scenarios.slice(i, i + batchSize);
+      const batchPromises = batch.map(async (settings) => {
+        try {
+          const power = await callPredictionAPI(buildFeaturesFromState(settings));
+          // Verify result is within comfort zone before adding
+          if (isWithinComfortZone(settings, setpoint)) {
+            return {
+              chillers: [settings.CHL_STA_1, settings.CHL_STA_2, settings.CHL_STA_3].map((v, idx) => v ? idx + 1 : 0).filter(v => v > 0),
+              speeds: [settings.CHL_COMP_SPD_CTRL_1, settings.CHL_COMP_SPD_CTRL_2, settings.CHL_COMP_SPD_CTRL_3].filter(v => v > 0),
+              fans: [settings.CT_FAN_SPD_CTRL_1, settings.CT_FAN_SPD_CTRL_2, settings.CT_FAN_SPD_CTRL_3].filter(v => v > 0),
+              flows: [settings.CHL_CD_FLOW_1, settings.CHL_CD_FLOW_2, settings.CHL_CD_FLOW_3].filter(v => v > 0),
+              kwPerTr: power / load,
+              totalPower: power,
+              setpoint: setpoint,
+              settings
+            };
+          }
+          return null;
+        } catch (e) {
+          console.warn('Scenario failed:', e);
+          return null;
+        }
+      });
+
+      const batchResults = await Promise.all(batchPromises);
+      results.push(...batchResults.filter((r): r is OptimalConfiguration => r !== null));
+    }
+
+    if (results.length === 0) {
+      throw new Error('All optimization scenarios failed. No solutions within comfort zone.');
+    }
+
+    // 4. Find Best (Minimum Total Power) within comfort zone
+    const best = results.reduce((prev, curr) => (curr.totalPower < prev.totalPower ? curr : prev), results[0]);
+    console.log('[Optimizer] Best result from hyperparameter search:', {
+      totalPower: best.totalPower,
+      kwPerTr: best.kwPerTr,
+      chillers: best.chillers,
+      speeds: best.speeds,
+      fans: best.fans,
+      flows: best.flows,
     });
 
-    const batchResults = await Promise.all(batchPromises);
-    batchResults.forEach(r => { if (r) results.push(r); });
-
-    if (i + batchSize < scenarios.length) {
-      await new Promise(resolve => setTimeout(resolve, 300));
+    // Also compare with baseline (if within comfort zone)
+    let bestFinal = best;
+    if (isWithinComfortZone(currentSettings, 6.5) && best.totalPower > currentTotalPower) {
+      console.log('[Optimizer] Baseline is better than optimized result, using baseline');
+      bestFinal = {
+        chillers: [currentSettings.CHL_STA_1, currentSettings.CHL_STA_2, currentSettings.CHL_STA_3].map((v, i) => v ? i + 1 : 0).filter(v => v > 0),
+        speeds: [currentSettings.CHL_COMP_SPD_CTRL_1, currentSettings.CHL_COMP_SPD_CTRL_2, currentSettings.CHL_COMP_SPD_CTRL_3].filter(v => v > 0),
+        fans: [currentSettings.CT_FAN_SPD_CTRL_1, currentSettings.CT_FAN_SPD_CTRL_2, currentSettings.CT_FAN_SPD_CTRL_3].filter(v => v > 0),
+        flows: [currentSettings.CHL_CD_FLOW_1, currentSettings.CHL_CD_FLOW_2, currentSettings.CHL_CD_FLOW_3].filter(v => v > 0),
+        kwPerTr: currentKwPerTr,
+        totalPower: currentTotalPower,
+        setpoint: 6.5,
+        settings: currentSettings
+      };
+    } else {
+      console.log('[Optimizer] Using optimized result from hyperparameter search');
     }
-  }
 
-  // 4. Find the best configuration (minimum power consumption)
-  if (results.length === 0) {
-    console.error('[Optimizer] All scenarios failed.');
+    const powerSaved = Math.max(0, currentTotalPower - bestFinal.totalPower);
+    const improvementPercent = currentTotalPower > 0 ? (powerSaved / currentTotalPower) * 100 : 0;
+
+    console.log('[Optimizer] Final result:', {
+      currentPower: currentTotalPower,
+      optimalPower: bestFinal.totalPower,
+      powerSaved: powerSaved,
+      improvementPercent: improvementPercent,
+    });
+
+    return {
+      currentConfig: {
+        chillers: [currentSettings.CHL_STA_1, currentSettings.CHL_STA_2, currentSettings.CHL_STA_3].map((v, i) => v ? i + 1 : 0).filter(v => v > 0),
+        speeds: [currentSettings.CHL_COMP_SPD_CTRL_1, currentSettings.CHL_COMP_SPD_CTRL_2, currentSettings.CHL_COMP_SPD_CTRL_3].filter(v => v > 0),
+        fans: [currentSettings.CT_FAN_SPD_CTRL_1, currentSettings.CT_FAN_SPD_CTRL_2, currentSettings.CT_FAN_SPD_CTRL_3].filter(v => v > 0),
+        flows: [currentSettings.CHL_CD_FLOW_1, currentSettings.CHL_CD_FLOW_2, currentSettings.CHL_CD_FLOW_3].filter(v => v > 0),
+        kwPerTr: currentKwPerTr,
+        totalPower: currentTotalPower,
+        setpoint: 6.5,
+        settings: currentSettings
+      },
+      optimalConfig: bestFinal,
+      powerSaved,
+      improvementPercent,
+      costSavingsPerHour: powerSaved * 0.12,
+      co2ReductionPerHour: powerSaved * 0.42
+    };
+  } catch (err) {
+    console.error('[Chiller Optimizer] Error:', err);
     return null;
   }
-
-  // Find best among all scenarios
-  const best = results.reduce((prev, curr) => (curr.totalPower < prev.totalPower ? curr : prev), results[0]);
-
-  // Calculate savings: always compare to current, even if current is best
-  const bestTotalPower = best.totalPower;
-  const powerSaved = currentTotalPower - bestTotalPower;
-  const improvementPercent = currentTotalPower > 0 ? (powerSaved / currentTotalPower) * 100 : 0;
-
-  console.log(`[Optimizer] Current: ${currentCount} chillers @ ${currentSetpoint}°C = ${currentTotalPower.toFixed(0)} kW`);
-  console.log(`[Optimizer] Best: ${best.count} chillers @ ${best.setpoint}°C = ${bestTotalPower.toFixed(0)} kW (saved ${powerSaved.toFixed(1)} kW)`);
-
-  // 5. Build Result
-  const expandChillers = (n: number) => Array.from({ length: n }, (_, i) => i + 1);
-
-  return {
-    currentConfig: {
-      chillers: expandChillers(currentCount),
-      setpoint: currentSetpoint,
-      kwPerTr: Number(currentKwPerTr.toFixed(3)),
-      totalPower: Number(currentTotalPower.toFixed(1)),
-    },
-    optimalConfig: {
-      chillers: expandChillers(best.count),
-      setpoint: best.setpoint,
-      kwPerTr: Number(best.kwPerTr.toFixed(3)),
-      totalPower: Number(bestTotalPower.toFixed(1)),
-    },
-    powerSaved: Number(powerSaved.toFixed(1)),
-    improvementPercent: Number(improvementPercent.toFixed(1)),
-    costSavingsPerHour: Number((powerSaved * 0.12).toFixed(2)),
-    co2ReductionPerHour: Number((powerSaved * 0.42).toFixed(1)),
-  };
 }
 
-/**
- * Formats a list of chillers for display (e.g. [1, 2] -> "1, 2")
- */
 export function formatChillerStageLabel(chillers: number[]): string {
   return Array.isArray(chillers) ? chillers.join(', ') : String(chillers);
 }
+

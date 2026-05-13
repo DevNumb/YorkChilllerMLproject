@@ -11,13 +11,13 @@ import {
   saveAssistantThread,
 } from '../services/assistantStorage.js';
 import AssistantChart from './AssistantChart.jsx';
+import { Trash2, Plus, Send } from 'lucide-react';
 import './assistant.css';
 
 const initialSections = [
   { id: 'chat', label: 'Chat' },
   { id: 'charts', label: 'Charts' },
   { id: 'history', label: 'History' },
-  { id: 'settings', label: 'Settings' },
 ];
 
 const quickPrompts = [
@@ -71,11 +71,19 @@ function getThreadPreview(thread) {
 
 function MessageBubble({ message }) {
   return (
-    <div className={`assistant-message ${message.role}`}>
-      <span className="assistant-message-label">
-        {message.role === 'user' ? 'Operator' : message.model ? `AI Assistant · ${message.model}` : 'AI Assistant'}
-      </span>
-      <div className="assistant-message-bubble">{message.content}</div>
+    <div className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'} mb-3`}>
+      <div className={`flex flex-col gap-1 max-w-xs lg:max-w-md`}>
+        <span className="text-xs uppercase tracking-wider text-muted-foreground px-2">
+          {message.role === 'user' ? 'Operator' : message.model ? `AI Assistant · ${message.model}` : 'AI Assistant'}
+        </span>
+        <div className={`px-4 py-2 rounded-lg border ${
+          message.role === 'user'
+            ? 'bg-gradient-to-br from-cyan-500/20 to-blue-500/20 border-cyan-500/24 text-cyan-50'
+            : 'bg-white/5 border-white/8 text-white/90'
+        }`}>
+          {message.content}
+        </div>
+      </div>
     </div>
   );
 }
@@ -93,12 +101,28 @@ export default function AIChatAssistant({ context = {}, onEnhancedSend }) {
 
   useEffect(() => {
     async function hydrateAssistant() {
-      const [savedThreads, savedSettings] = await Promise.all([loadAssistantThreads(), loadAssistantSettings()]);
-      const nextThreads = savedThreads.length ? savedThreads : [createThread('Operator assistant')];
-      setThreads(nextThreads);
-      setActiveThreadId(nextThreads[0].id);
-      setSettings(savedSettings);
-      setReady(true);
+      const timeout = setTimeout(() => {
+        if (!ready) {
+          console.warn('Assistant hydration timed out, forcing ready state');
+          setReady(true);
+        }
+      }, 3000);
+
+      try {
+        const [savedThreads, savedSettings] = await Promise.all([loadAssistantThreads(), loadAssistantSettings()]);
+        const nextThreads = savedThreads.length ? savedThreads : [createThread('Operator assistant')];
+        setThreads(nextThreads);
+        setActiveThreadId(nextThreads[0].id);
+        setSettings(savedSettings);
+      } catch (err) {
+        console.error('Failed to hydrate assistant:', err);
+        const fallbackThread = createThread('Operator assistant');
+        setThreads([fallbackThread]);
+        setActiveThreadId(fallbackThread.id);
+      } finally {
+        clearTimeout(timeout);
+        setReady(true);
+      }
     }
 
     hydrateAssistant();
@@ -106,7 +130,7 @@ export default function AIChatAssistant({ context = {}, onEnhancedSend }) {
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
-  }, [activeThreadId, threads, loading]);
+  }, [activeThreadId, threads, loading, activeSection]);
 
   const activeThread = useMemo(
     () => threads.find((thread) => thread.id === activeThreadId) || threads[0] || null,
@@ -248,208 +272,171 @@ export default function AIChatAssistant({ context = {}, onEnhancedSend }) {
 
   const sectionContent = {
     chat: (
-      <>
-        <div className="assistant-chat-area">
+      <div className="flex-1 flex flex-col min-h-0">
+        <div className="flex-1 overflow-y-auto space-y-2 px-4 py-3 scrollbar-thin scrollbar-thumb-cyan-500/30 scrollbar-track-transparent">
           {activeThread?.messages.map((message) => <MessageBubble key={message.id} message={message} />)}
-          {loading ? <div className="assistant-loading">Generating assistant response...</div> : null}
+          {loading ? (
+            <div className="text-sm text-muted-foreground animate-pulse px-4 py-2">Generating assistant response...</div>
+          ) : null}
           <div ref={messagesEndRef} />
         </div>
 
-        <div className="assistant-chat-tools">
+        <div className="flex flex-wrap gap-2 px-4 py-2 border-t border-white/8 bg-white/2">
           {quickPrompts.map((prompt) => (
-            <button key={prompt} type="button" className="assistant-chip" onClick={() => setDraft(prompt)} disabled={loading}>
+            <button
+              key={prompt}
+              type="button"
+              className="text-xs px-3 py-1.5 rounded-full border border-cyan-500/14 bg-cyan-500/8 text-cyan-200 hover:bg-cyan-500/12 hover:border-cyan-500/32 transition-all disabled:opacity-50"
+              onClick={() => setDraft(prompt)}
+              disabled={loading}
+            >
               {prompt}
             </button>
           ))}
         </div>
 
-        <div className="assistant-compose">
-          <form className="assistant-compose-form" onSubmit={handleSubmit}>
+        <div className="border-t border-white/8 bg-white/2 px-4 py-3">
+          <form className="space-y-2" onSubmit={handleSubmit}>
             <textarea
-              className="assistant-compose-input"
+              className="w-full min-h-11 max-h-24 resize-none px-3 py-2 rounded-lg border border-cyan-500/14 bg-slate-950/92 text-white placeholder-slate-400 focus:outline-none focus:border-cyan-500/32 focus:ring-1 focus:ring-cyan-500/20 text-sm"
               value={draft}
               onChange={(event) => setDraft(event.target.value)}
               placeholder="Ask about efficiency, fault checks, charts, or operator actions..."
               disabled={loading}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                  e.preventDefault();
+                  handleSubmit(e);
+                }
+              }}
             />
-            <div className="assistant-compose-footer">
-              <span className="assistant-subtle">
-                Context sent: live conditions, optimization inputs, latest recommendation, and this conversation.
+            <div className="flex justify-between items-center gap-2 text-xs">
+              <span className="text-muted-foreground hidden sm:inline">
+                Context sent: live conditions, optimization, and conversation.
               </span>
-              <button type="submit" className="assistant-save-btn" disabled={loading || !draft.trim()}>
+              <button
+                type="submit"
+                className="ml-auto inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-cyan-500/28 bg-gradient-to-r from-cyan-500/12 to-emerald-500/12 text-cyan-100 hover:from-cyan-500/18 hover:to-emerald-500/18 hover:border-cyan-500/40 transition-all disabled:opacity-50 text-sm font-medium"
+                disabled={loading || !draft.trim()}
+              >
+                <Send size={14} />
                 {loading ? 'Sending...' : 'Send'}
               </button>
             </div>
           </form>
         </div>
-      </>
+      </div>
     ),
     charts: (
-      <div className="assistant-charts-grid">
+      <div className="flex-1 grid gap-4 p-4 overflow-y-auto">
         {visibleCharts.length ? (
           visibleCharts.map((chart, index) => <AssistantChart key={`${chart.title}-${index}`} chart={chart} />)
         ) : (
-          <div className="assistant-empty-copy">Ask the assistant for a chart or run an optimization first.</div>
+          <div className="text-sm text-muted-foreground">Ask the assistant for a chart or run an optimization first.</div>
         )}
       </div>
     ),
     history: (
-      <div className="assistant-history-grid">
+      <div className="flex-1 grid gap-3 p-4 overflow-y-auto">
         {threadHistoryItems.map((thread) => (
-          <div key={thread.id} className="assistant-history-card">
-            <div>
-              <strong>{thread.title}</strong>
-              <div className="assistant-history-meta">{thread.preview}</div>
-            </div>
-            <div className="assistant-history-meta">
-              {new Date(thread.updatedAt).toLocaleString()}
-              <br />
-              {thread.messageCount} messages · {thread.chartCount} charts
+          <div key={thread.id} className="p-3 rounded-lg border border-white/8 bg-white/3 hover:bg-white/5 transition-colors">
+            <div className="flex justify-between gap-3">
+              <div className="flex-1 min-w-0">
+                <strong className="block text-sm text-white truncate">{thread.title}</strong>
+                <div className="text-xs text-muted-foreground mt-1 line-clamp-2">{thread.preview}</div>
+              </div>
+              <div className="text-xs text-muted-foreground text-right flex-shrink-0">
+                {new Date(thread.updatedAt).toLocaleString()}
+                <br />
+                {thread.messageCount} msgs · {thread.chartCount} charts
+              </div>
             </div>
           </div>
         ))}
       </div>
     ),
-    settings: (
-      <form className="assistant-settings-grid" onSubmit={handleSaveSettings}>
-        <div className="assistant-settings-card">
-          <div className="assistant-setting-header">
-            <div>
-              <h4>Model Settings</h4>
-              <div className="assistant-setting-note">
-                Your OpenRouter API key belongs in Vercel environment variables, not in the browser.
-              </div>
-            </div>
-          </div>
-          <label>
-            <span>Model</span>
-            <input
-              type="text"
-              value={settings.model}
-              onChange={(event) => setSettings((current) => ({ ...current, model: event.target.value }))}
-              placeholder="openrouter/free"
-            />
-          </label>
-          <label>
-            <span>Assistant API URL</span>
-            <input
-              type="text"
-              value={settings.apiUrl}
-              onChange={(event) => setSettings((current) => ({ ...current, apiUrl: event.target.value }))}
-              placeholder="/api/assistant"
-            />
-          </label>
-          <label className="assistant-toggle">
-            <input
-              type="checkbox"
-              checked={settings.autoOpenCharts}
-              onChange={(event) => setSettings((current) => ({ ...current, autoOpenCharts: event.target.checked }))}
-            />
-            <span>Auto-open the Charts page when the assistant returns a chart</span>
-          </label>
-          <label className="assistant-toggle">
-            <input
-              type="checkbox"
-              checked={settings.saveChats}
-              onChange={(event) => setSettings((current) => ({ ...current, saveChats: event.target.checked }))}
-            />
-            <span>Save assistant chat history in IndexedDB on this device</span>
-          </label>
-        </div>
-
-        <div className="assistant-settings-card">
-          <h4>Vercel Environment Variables</h4>
-          <div className="assistant-setting-note">Add these in Vercel for production:</div>
-          <textarea
-            rows={6}
-            readOnly
-            value={`OPENROUTER_API_KEY=your-openrouter-api-key\nOPENROUTER_MODEL=${settings.model || ASSISTANT_DEFAULT_MODEL}\nOPENROUTER_APP_URL=https://your-vercel-app.vercel.app\nOPENROUTER_APP_NAME=Chiller Energy Optimizer`}
-          />
-        </div>
-
-        <button type="submit" className="assistant-save-btn">
-          Save Assistant Settings
-        </button>
-      </form>
-    ),
   };
 
   if (!ready || !activeThread) {
     return (
-      <section className="glass-card panel-stack">
-        <div className="assistant-loading">Loading assistant workspace...</div>
-      </section>
+      <div className="flex items-center justify-center h-full">
+        <div className="text-sm text-muted-foreground animate-pulse">Loading assistant workspace...</div>
+      </div>
     );
   }
 
   return (
-    <section className="glass-card panel-stack">
-      <div className="assistant-shell">
-        <aside className="assistant-sidebar">
-          <div className="assistant-brand">
-            <p className="section-label">AI Assistant</p>
-            <h3>Operator Messenger</h3>
-            <p>Chat, charts, saved sessions, and settings for your plant assistant.</p>
+    <div className="flex flex-col h-full bg-gradient-to-b from-slate-900/50 to-slate-950/30 rounded-xl border border-white/8 overflow-hidden">
+      {/* Header */}
+      <div className="flex justify-between items-start gap-4 px-6 py-4 border-b border-white/8 bg-white/2 flex-shrink-0">
+        <div>
+          <p className="text-xs uppercase tracking-widest text-muted-foreground mb-1">{activeSection}</p>
+          <h3 className="text-lg font-semibold text-white">{activeThread.title}</h3>
+          <div className="text-xs text-muted-foreground mt-1">{getThreadPreview(activeThread)}</div>
+        </div>
+        <div className="flex items-center gap-2 flex-shrink-0">
+          <span className="text-xs px-2.5 py-1 rounded-lg bg-cyan-500/8 border border-cyan-500/16 text-cyan-200">
+            {settings.model || ASSISTANT_DEFAULT_MODEL}
+          </span>
+          <button
+            type="button"
+            className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg border border-red-500/24 bg-red-500/6 text-red-300 hover:bg-red-500/12 hover:border-red-500/40 transition-all text-xs font-medium"
+            onClick={() => handleDeleteThread(activeThread.id)}
+            title="Delete conversation"
+          >
+            <Trash2 size={14} />
+            Delete
+          </button>
+        </div>
+      </div>
+
+      {/* Sidebar + Content */}
+      <div className="flex flex-1 min-h-0 gap-4 p-4">
+        {/* Sidebar */}
+        <aside className="w-56 flex flex-col gap-3 flex-shrink-0 border-r border-white/8 pr-4">
+          <div className="pb-3 border-b border-white/8">
+            <p className="text-xs uppercase tracking-widest text-muted-foreground mb-2">AI Assistant</p>
+            <h4 className="text-base font-semibold text-cyan-400 mb-1">Operator Messenger</h4>
+            <p className="text-xs text-muted-foreground leading-relaxed">Chat, charts, saved sessions, and settings for your plant assistant.</p>
           </div>
 
-          <button type="button" className="assistant-create-btn" onClick={handleNewThread}>
+          <button
+            type="button"
+            className="w-full inline-flex items-center justify-center gap-2 px-3 py-2 rounded-lg border border-cyan-500/28 bg-gradient-to-r from-cyan-500/12 to-emerald-500/12 text-cyan-100 hover:from-cyan-500/18 hover:to-emerald-500/18 hover:border-cyan-500/40 transition-all text-sm font-medium"
+            onClick={handleNewThread}
+          >
+            <Plus size={16} />
             New Conversation
           </button>
 
-          <nav className="assistant-nav">
+          <nav className="flex flex-col gap-1.5">
             {initialSections.map((section) => (
               <button
                 key={section.id}
                 type="button"
-                className={activeSection === section.id ? 'assistant-nav-btn active' : 'assistant-nav-btn'}
+                className={`w-full text-left px-3 py-2 rounded-lg text-sm font-medium transition-all ${
+                  activeSection === section.id
+                    ? 'bg-cyan-500/12 border border-cyan-500/32 text-cyan-300'
+                    : 'bg-white/3 border border-white/8 text-white/70 hover:bg-white/5 hover:border-white/12'
+                }`}
                 onClick={() => setActiveSection(section.id)}
               >
                 {section.label}
               </button>
             ))}
           </nav>
-
-          <div className="assistant-thread-list">
-            {threads.map((thread) => (
-              <button
-                key={thread.id}
-                type="button"
-                className={thread.id === activeThreadId ? 'assistant-thread-btn active' : 'assistant-thread-btn'}
-                onClick={() => {
-                  setActiveThreadId(thread.id);
-                  setActiveSection('chat');
-                }}
-              >
-                <span className="assistant-thread-title">{thread.title}</span>
-                <span className="assistant-thread-time">
-                  {new Date(thread.updatedAt).toLocaleDateString()} · {thread.messages.length} msgs
-                </span>
-              </button>
-            ))}
-          </div>
         </aside>
 
-        <div className="assistant-panel-main">
-          <div className="assistant-panel-header">
-            <div>
-              <p className="section-label">{activeSection}</p>
-              <h3>{activeThread.title}</h3>
-              <div className="assistant-subtle">{getThreadPreview(activeThread)}</div>
+        {/* Main Content */}
+        <div className="flex-1 flex flex-col min-w-0 bg-white/2 rounded-lg border border-white/8 overflow-hidden">
+          {error ? (
+            <div className="px-4 py-3 bg-red-500/10 border-b border-red-500/22 text-red-300 text-sm rounded-t-lg">
+              {error}
             </div>
-            <div className="assistant-panel-header-actions">
-              <span className="assistant-model-badge">{settings.model || ASSISTANT_DEFAULT_MODEL}</span>
-              <button type="button" className="assistant-delete-btn" onClick={() => handleDeleteThread(activeThread.id)}>
-                Delete
-              </button>
-            </div>
-          </div>
-
-          <div className="assistant-panel-body">
-            {error ? <div className="assistant-error">{error}</div> : null}
-            {sectionContent[activeSection]}
-          </div>
+          ) : null}
+          {sectionContent[activeSection]}
         </div>
       </div>
-    </section>
+    </div>
   );
 }

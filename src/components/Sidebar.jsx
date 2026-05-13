@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
 import { logoutUser, getCurrentUser } from '../services/supabaseAuthService';
 import './Sidebar.css';
@@ -9,7 +9,7 @@ export default function Sidebar() {
   const [loading, setLoading] = useState(false);
 
   // Get current user on mount
-  useState(() => {
+  useEffect(() => {
     async function loadUser() {
       try {
         const currentUser = await getCurrentUser();

@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef } from 'react';
+import { useState, useCallback, useRef, useMemo } from 'react';
 import AIChatAssistant from '../components/AIChatAssistant';
 import { buildAssistantContext } from '../services/assistantContext';
 import { fetchPlantData, fetchMaintenanceData, buildContextPrompt } from '../services/contextFetcher';
@@ -11,11 +11,11 @@ export default function ChatPage() {
   const [contextLoading, setContextLoading] = useState(false);
   const lastFetchRef = useRef(0);
 
-  const assistantContext = buildAssistantContext({
+  const assistantContext = useMemo(() => buildAssistantContext({
     weather: { loading: false, error: '', location: '', temperature: null, humidity: null, wetBulb: null, source: 'none' },
     inputs: {},
     result: null,
-  });
+  }), []);
 
   const handleEnhancedSend = useCallback(async ({ question, context, settings, conversation }) => {
     setContextLoading(true);
@@ -58,20 +58,23 @@ export default function ChatPage() {
   return (
     <div className="chat-page">
       <div className="chat-page-header">
-        <h1>AI Assistant</h1>
-        <p>Ask questions about energy optimization, chiller operations, or maintenance recommendations.</p>
-        {liveContext && (
-          <div className="chat-context-indicator">
-            <span className="chat-context-dot" /> Live plant data connected
+        <div>
+          <h1>AI Assistant</h1>
+          <div className="flex items-center gap-3 mt-2">
+            {liveContext && (
+              <div className="chat-context-indicator">
+                <span className="chat-context-dot" /> Live plant data connected
+              </div>
+            )}
+            {contextLoading && (
+              <div className="chat-context-loading">
+                Fetching live data...
+              </div>
+            )}
           </div>
-        )}
-        {contextLoading && (
-          <div className="chat-context-loading">
-            Fetching live data...
-          </div>
-        )}
+        </div>
       </div>
-      <div className="chat-page-content">
+      <div className="chat-page-content p-4 md:p-6 lg:p-7">
         <AIChatAssistant context={assistantContext} onEnhancedSend={handleEnhancedSend} />
       </div>
     </div>

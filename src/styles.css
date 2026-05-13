@@ -1,3 +1,5 @@
+@import "tailwindcss";
+
 :root {
   color-scheme: dark;
   font-family: "Segoe UI", "Inter", sans-serif;
@@ -14,6 +16,7 @@
   -moz-osx-font-smoothing: grayscale;
   --bg-panel: rgba(10, 20, 34, 0.78);
   --bg-panel-strong: rgba(9, 17, 28, 0.95);
+  --bg-primary: #0a1422;
   --border: rgba(163, 201, 255, 0.18);
   --accent: #64d6ff;
   --accent-strong: #4be4a4;
@@ -29,6 +32,7 @@
 body {
   margin: 0;
   min-height: 100vh;
+  overflow-x: hidden;
 }
 
 button,
@@ -48,20 +52,19 @@ button {
 .app-container {
   display: flex;
   min-height: 100vh;
+  width: 100%;
 }
 
 .main-content {
   flex: 1;
-  margin-left: 220px;
+  padding-left: 220px;
   min-height: 100vh;
+  width: 100%;
 }
 
 .dashboard-page {
   position: relative;
   min-height: 100vh;
-  padding: 28px;
-  overflow: hidden;
-}
   padding: 28px;
   overflow: hidden;
 }
@@ -283,13 +286,132 @@ button {
   color: var(--muted);
 }
 
-/* Responsive */
-@media (max-width: 1200px) {
-  .row-3-cols {
-    grid-template-columns: repeat(2, 1fr);
-  }
-  .row-3-cols > *:nth-child(3) {
-    grid-column: span 2;
+/* Chiller Baseline Grid */
+.chiller-baseline-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+  margin-top: 12px;
+}
+
+.chiller-status-mini {
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 14px;
+  padding: 12px;
+  transition: opacity 0.2s ease;
+}
+
+.chiller-status-mini.is-off {
+  opacity: 0.5;
+}
+
+.mini-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 10px;
+}
+
+.mini-header span {
+  font-weight: 600;
+  font-size: 0.85rem;
+}
+
+.toggle-small {
+  padding: 4px 10px;
+  font-size: 0.7rem;
+  font-weight: 700;
+  border-radius: 6px;
+  border: 1px solid transparent;
+}
+
+.toggle-small.on {
+  background: rgba(75, 228, 164, 0.2);
+  color: #4be4a4;
+  border-color: rgba(75, 228, 164, 0.3);
+}
+
+.toggle-small.off {
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--muted);
+  border-color: rgba(255, 255, 255, 0.1);
+}
+
+.mini-controls {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.mini-input {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+}
+
+.mini-input small {
+  color: var(--muted);
+  font-size: 0.75rem;
+}
+
+.mini-input input {
+  width: 50px;
+  padding: 4px 6px;
+  font-size: 0.8rem;
+  border-radius: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(0, 0, 0, 0.2);
+  color: white;
+  text-align: center;
+}
+
+/* Optimized Settings Table */
+.optimized-table-container {
+  margin-top: 24px;
+}
+
+.optimized-settings-table {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0 8px;
+  margin-top: 10px;
+}
+
+.optimized-settings-table th {
+  text-align: left;
+  font-size: 0.75rem;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  padding: 0 12px;
+}
+
+.optimized-settings-table td {
+  padding: 12px;
+  background: rgba(255, 255, 255, 0.03);
+  border-top: 1px solid rgba(255, 255, 255, 0.05);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.optimized-settings-table td:first-child {
+  border-left: 1px solid rgba(255, 255, 255, 0.05);
+  border-top-left-radius: 12px;
+  border-bottom-left-radius: 12px;
+  font-weight: 600;
+  color: var(--accent);
+}
+
+.optimized-settings-table td:last-child {
+  border-right: 1px solid rgba(255, 255, 255, 0.05);
+  border-top-right-radius: 12px;
+  border-bottom-right-radius: 12px;
+}
+
+@media (max-width: 600px) {
+  .chiller-baseline-grid {
+    grid-template-columns: 1fr;
   }
 }
 
