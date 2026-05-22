@@ -1,0 +1,19 @@
+@startuml
+actor User
+participant "Login Page (UI)" as UI
+participant "SupabaseAuthService" as Auth
+participant "Supabase API" as Supabase
+database "Database (RPC)" as DB
+participant "LocalStorage" as LS
+
+User -> UI: Enter Email, Password, Remember Me
+UI -> UI: Validate Form Data
+UI -> Auth: loginUser(email, password)
+Auth -> Supabase: auth.signInWithPassword({email, password})
+Supabase --> Auth: User Data & Session
+Auth -> DB: log_user_action('login')
+DB --> Auth: Acknowledgment
+Auth --> UI: Success Response
+UI -> LS: Store/Remove Remember Email
+UI -> User: Redirect to Dashboard
+@enduml

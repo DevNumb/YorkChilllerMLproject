@@ -1,0 +1,56 @@
+@startuml
+title Figure X: User Login Participant Diagram
+
+' Professional Styling
+skinparam actorStyle awesome
+skinparam backgroundColor white
+skinparam handwritten false
+skinparam monochrome false
+skinparam shadowing false
+skinparam roundcorner 10
+
+skinparam boundary {
+    BackgroundColor #f0f7ff
+    BorderColor #0078d4
+}
+
+skinparam control {
+    BackgroundColor #fff9e6
+    BorderColor #d4a017
+}
+
+skinparam entity {
+    BackgroundColor #f6fff6
+    BorderColor #228b22
+}
+
+skinparam note {
+    BackgroundColor #fff9e6
+    BorderColor #d4a017
+    FontSize 11
+}
+
+actor User
+boundary "Login Page" as UI <<Boundary>>
+control "SupabaseAuthService" as Auth <<Control>>
+entity "Supabase Auth" as Supabase <<Entity>>
+entity "Audit Log (DB)" as DB <<Entity>>
+entity "LocalStorage" as LS <<Entity>>
+
+User - UI : 1: Submit Credentials\n(Email, Password, Remember Me)
+UI - Auth : 2: loginUser()
+Auth - Supabase : 3: signInWithPassword()
+Supabase - Auth : 4: Return User/Session
+Auth - DB : 5: log_user_action('login')
+Auth - UI : 6: Success Response
+UI - LS : 7: Store/Clear 'rememberEmail'
+UI - User : 8: Navigate to Dashboard
+
+note right of UI
+  **Alternative Flow:**
+  If credentials invalid,
+  Auth returns Error,
+  UI displays error message.
+end note
+
+@enduml

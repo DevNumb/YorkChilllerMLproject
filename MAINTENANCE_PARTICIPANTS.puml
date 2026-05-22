@@ -1,0 +1,55 @@
+@startuml
+title Figure Y: Maintenance Task Completion Participant Diagram
+
+' Professional Styling
+skinparam actorStyle awesome
+skinparam backgroundColor white
+skinparam handwritten false
+skinparam monochrome false
+skinparam shadowing false
+skinparam roundcorner 10
+
+skinparam boundary {
+    BackgroundColor #f0f7ff
+    BorderColor #0078d4
+}
+
+skinparam control {
+    BackgroundColor #fff9e6
+    BorderColor #d4a017
+}
+
+skinparam entity {
+    BackgroundColor #f6fff6
+    BorderColor #228b22
+}
+
+skinparam note {
+    BackgroundColor #fff9e6
+    BorderColor #d4a017
+    FontSize 11
+}
+
+actor "Maintenance Staff" as User
+boundary "Maintenance Page" as UI <<Boundary>>
+control "SupabaseMaintenanceService" as Service <<Control>>
+entity "Maintenance Tasks" as Tasks <<Entity>>
+entity "Maintenance History" as History <<Entity>>
+entity "Maintenance Stats" as Stats <<Entity>>
+
+User - UI : 1: Mark Task as Completed
+UI - Service : 2: completeTask(id, data)
+Service - Tasks : 3: Update Status & Next Due Date
+Service - History : 4: Insert Completion Record
+Service - Stats : 5: Update/Insert Performance Stats
+Service - UI : 6: Success Response
+UI - User : 7: Refresh Task List & Stats
+
+note right of UI
+  **Alternative Flow:**
+  If DB update fails,
+  UI displays error
+  and maintains state.
+end note
+
+@enduml

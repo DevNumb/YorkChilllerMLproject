@@ -1,0 +1,51 @@
+@startuml User Session Validation Sequence Diagram
+autonumber
+
+participant "Browser / App Load" as Browser
+participant "App.jsx" as App
+participant "supabaseAuthService.js" as Service
+database "Supabase Auth" as AuthDB
+
+== Initial Session Check ==
+Browser -> App: Initial Load
+activate App
+
+App -> Service: getCurrentSession()
+activate Service
+Service -> AuthDB: supabase.auth.getSession()
+activate AuthDB
+AuthDB --> Service: { session, error }
+deactivate AuthDB
+Service --> App: session
+deactivate Service
+
+App -> App: setIsAuthenticated(!!session)
+App -> App: setIsLoading(false)
+
+alt Session Exists
+    App -> Browser: Render Protected Content
+else No Session
+    App -> Browser: Redirect to /login
+end
+
+== Auth State Change (Subscription) ==
+App -> Service: onAuthStateChange(callback)
+activate Service
+Service -> AuthDB: supabase.auth.onAuthStateChange()
+activate AuthDB
+note over AuthDB: Background listener active
+... Time passes ...
+User -> AuthDB: Login / Logout / Session Expiry
+AuthDB --> Service: (event, session) trigger
+Service --> App: callback(event, session)
+deactivate Service
+
+App -> App: setIsAuthenticated(!!session)
+
+alt session becomes null
+    App -> Browser: Redirect to /login
+else session becomes valid
+    App -> Browser: Show Protected Content
+end
+
+@enduml

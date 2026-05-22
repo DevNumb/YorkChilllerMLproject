@@ -6,6 +6,7 @@ import ChatPage from './pages/ChatPage';
 import EnergyForecasting from './pages/EnergyForecasting';
 import MaintenanceScheduler from './pages/MaintenanceScheduler';
 import CostSavingsDashboard from './pages/CostSavingsDashboard';
+import FaultDetection from './pages/FaultDetection';
 import Login from './pages/Login';
 import Register from './pages/Register';
 import { getCurrentSession, onAuthStateChange } from './services/supabaseAuthService';
@@ -83,6 +84,7 @@ export default function App() {
                   <Route path="/energy-forecast" element={<EnergyForecasting />} />
                   <Route path="/maintenance-scheduler" element={<MaintenanceScheduler />} />
                   <Route path="/cost-savings" element={<CostSavingsDashboard />} />
+                  <Route path="/fault-detection" element={<FaultDetection />} />
                 </Routes>
               </main>
             </div>

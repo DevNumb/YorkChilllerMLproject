@@ -1,0 +1,52 @@
+@startuml
+title Figure Z: User Registration Participant Diagram
+
+' Professional Styling
+skinparam actorStyle awesome
+skinparam backgroundColor white
+skinparam handwritten false
+skinparam monochrome false
+skinparam shadowing false
+skinparam roundcorner 10
+
+skinparam boundary {
+    BackgroundColor #f0f7ff
+    BorderColor #0078d4
+}
+
+skinparam control {
+    BackgroundColor #fff9e6
+    BorderColor #d4a017
+}
+
+skinparam entity {
+    BackgroundColor #f6fff6
+    BorderColor #228b22
+}
+
+skinparam note {
+    BackgroundColor #fff9e6
+    BorderColor #d4a017
+    FontSize 11
+}
+
+actor User
+boundary "Registration Page" as UI <<Boundary>>
+control "SupabaseAuthService" as Auth <<Control>>
+entity "Supabase Auth" as Supabase <<Entity>>
+
+User - UI : 1: Provide Details\n(Name, Email, Password)
+UI - Auth : 2: registerUser()
+Auth - Supabase : 3: signUp()
+Supabase - Auth : 4: Return User/Session
+Auth - UI : 5: Success Response
+UI - User : 6: Redirect/Notify
+
+note right of UI
+  **Alternative Flow:**
+  If email exists or
+  validation fails,
+  UI displays error.
+end note
+
+@enduml

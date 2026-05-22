@@ -1,0 +1,20 @@
+@startuml
+left to right direction
+
+actor "User" as user
+
+rectangle "Authentication System" {
+  usecase "Sign Up" as UC1
+  usecase "Sign In" as UC2
+  usecase "Sign Out" as UC3
+  usecase "Reset Password" as UC4
+  usecase "Manage Profile" as UC5
+}
+
+user --> UC1
+user --> UC2
+user --> UC3
+user --> UC4
+user --> UC5
+
+@enduml

@@ -1,0 +1,39 @@
+@startuml User Registration Sequence Diagram
+autonumber
+
+actor "End User" as User
+participant "Register.jsx" as UI
+participant "supabaseAuthService.js" as Service
+database "Supabase Auth" as DB
+
+User -> UI: Input Full Name, Email, Password
+User -> UI: Click "Create Account"
+activate UI
+
+UI -> UI: validateFormData()
+note right: Check email format, password length,\nand password confirmation
+
+alt Invalid Data
+    UI --> User: Display Error Message
+else Valid Data
+    UI -> Service: registerUser(email, password, fullName)
+    activate Service
+    
+    Service -> DB: supabase.auth.signUp(email, password, {full_name})
+    activate DB
+    
+    alt Success
+        DB --> Service: { data: null, user, session }
+        Service --> UI: { user, session }
+        UI -> User: Navigate to /login?registered=true
+    else Failure
+        DB --> Service: { data: null, error }
+        deactivate DB
+        Service --> UI: throw error
+        deactivate Service
+        UI --> User: Display Error Message
+    end
+end
+deactivate UI
+
+@enduml

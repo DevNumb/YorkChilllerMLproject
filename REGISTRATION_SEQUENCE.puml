@@ -1,0 +1,14 @@
+@startuml
+actor User
+participant "Registration Page (UI)" as UI
+participant "SupabaseAuthService" as Auth
+participant "Supabase API" as Supabase
+
+User -> UI: Enter Name, Email, Password
+UI -> UI: Validate Form Data
+UI -> Auth: registerUser(email, password, fullName)
+Auth -> Supabase: auth.signUp({email, password, data: {full_name}})
+Supabase --> Auth: User Data & Session
+Auth --> UI: Success Response
+UI -> User: Redirect to Login with Success Message
+@enduml

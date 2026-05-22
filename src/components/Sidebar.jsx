@@ -63,6 +63,10 @@ export default function Sidebar() {
           <span className="nav-icon">💰</span>
           <span className="nav-label">Cost Savings</span>
         </NavLink>
+        <NavLink to="/fault-detection" className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
+          <span className="nav-icon">🔍</span>
+          <span className="nav-label">Fault Detection</span>
+        </NavLink>
       </div>
 
       <div className="sidebar-footer">

@@ -1,0 +1,67 @@
+@startuml Authentication Module Class Diagram
+
+package "UI Components" {
+    class Login {
+        - formData: Object
+        - loading: boolean
+        - error: string
+        + handleChange(e: Event)
+        + handleSubmit(e: Event)
+    }
+
+    class Register {
+        - formData: Object
+        - loading: boolean
+        - error: string
+        + handleChange(e: Event)
+        + handleSubmit(e: Event)
+    }
+}
+
+package "Services" {
+    class SupabaseAuthService <<Service>> {
+        + registerUser(email, password, fullName)
+        + loginUser(email, password)
+        + logoutUser()
+        + getCurrentUser()
+        + getCurrentSession()
+        + getUserProfile(userId)
+        + updateUserProfile(userId, updates)
+        + resetPassword(email)
+        + updatePassword(newPassword)
+        + logUserAction(action, resourceType, resourceId, details)
+        + onAuthStateChange(callback)
+    }
+
+    class SupabaseClient {
+        + supabase: createClient
+    }
+}
+
+package "Models/Entities" {
+    class User {
+        + id: string
+        + email: string
+    }
+
+    class UserProfile {
+        + id: string
+        + full_name: string
+        + updated_at: string
+    }
+
+    class Session {
+        + user: User
+        + access_token: string
+    }
+}
+
+' Relationships
+Login ..> SupabaseAuthService : calls
+Register ..> SupabaseAuthService : calls
+SupabaseAuthService --> SupabaseClient : uses
+SupabaseAuthService ..> User : returns
+SupabaseAuthService ..> Session : returns
+SupabaseAuthService ..> UserProfile : manages
+
+@enduml

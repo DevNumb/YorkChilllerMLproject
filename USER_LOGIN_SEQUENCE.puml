@@ -1,0 +1,55 @@
+@startuml User Login Sequence Diagram
+autonumber
+
+actor "End User" as User
+participant "Login.jsx" as UI
+participant "supabaseAuthService.js" as Service
+database "Supabase Auth" as AuthDB
+database "Supabase DB" as AppDB
+participant "LocalStorage" as LS
+
+User -> UI: Input Email, Password
+User -> UI: Toggle "Remember Me" (optional)
+User -> UI: Click "Sign In"
+activate UI
+
+UI -> UI: validateFormData()
+
+alt Invalid Data
+    UI --> User: Display Error Message
+else Valid Data
+    UI -> Service: loginUser(email, password)
+    activate Service
+    
+    Service -> AuthDB: supabase.auth.signInWithPassword(email, password)
+    activate AuthDB
+    
+    alt Auth Success
+        AuthDB --> Service: { data: { user, session }, error: null }
+        
+        Service -> AppDB: logUserAction('login', 'auth', 'login')
+        activate AppDB
+        AppDB --> Service: Success/Failure (logged)
+        deactivate AppDB
+        
+        Service --> UI: { user, session }
+        
+        alt Remember Me Checked
+            UI -> LS: setItem('rememberEmail', email)
+        else Remember Me Unchecked
+            UI -> LS: removeItem('rememberEmail')
+        end
+        
+        UI -> User: Navigate to /dashboard
+        
+    else Auth Failure
+        AuthDB --> Service: { data: null, error }
+        deactivate AuthDB
+        Service --> UI: throw error
+        deactivate Service
+        UI --> User: Display Error Message
+    end
+end
+deactivate UI
+
+@enduml
