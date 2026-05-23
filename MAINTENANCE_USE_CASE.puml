@@ -1,0 +1,41 @@
+@startuml Maintenance Management Use Case Diagram
+
+left to right direction
+
+actor "Maintenance Staff / Operator" as User
+actor "Supabase" as DB <<System>>
+
+package "Maintenance Management Module" {
+    usecase "View Maintenance Checklist" as UC_ViewTasks
+    usecase "Filter & Search Tasks" as UC_Filter
+    usecase "Add New Maintenance Task" as UC_Add
+    usecase "Mark Task as Completed" as UC_Complete
+    usecase "Log Completion Details" as UC_Log
+    usecase "View Task History (Audit Trail)" as UC_History
+    usecase "Generate Yearly Maintenance Report" as UC_Report
+    usecase "Export Maintenance Schedule" as UC_Export
+    usecase "Update Task Details" as UC_Update
+    usecase "Automated Status Refresh" as UC_StatusRefresh
+}
+
+' User Actions
+User --> UC_ViewTasks
+User --> UC_Filter
+User --> UC_Add
+User --> UC_Complete
+User --> UC_History
+User --> UC_Report
+User --> UC_Export
+User --> UC_Update
+
+' Relationships & System Interactions
+UC_Complete ..> UC_Log : includes
+UC_Log ..> DB : saves entry
+UC_Add ..> DB : saves record
+UC_ViewTasks ..> DB : reads from
+UC_History ..> DB : reads from
+UC_Report ..> DB : aggregates data
+UC_StatusRefresh ..> DB : updates overdue tasks
+UC_Update ..> DB : modifies record
+
+@enduml

@@ -1,0 +1,58 @@
+@startuml View Active Faults Sequence Diagram
+title Figure X: Fault Detection - View & Filter Active Faults Sequence Diagram
+
+' Professional Sequence Diagram Styling
+skinparam actorStyle awesome
+skinparam backgroundColor white
+skinparam handwritten false
+skinparam monochrome false
+skinparam shadowing false
+skinparam roundcorner 10
+skinparam ParticipantPadding 40
+skinparam BoxPadding 10
+
+skinparam sequence {
+    ArrowColor #0078d4
+    LifeLineBorderColor #0078d4
+    LifeLineBackgroundColor #f0f7ff
+    
+    ParticipantBackgroundColor #f0f7ff
+    ParticipantBorderColor #0078d4
+    ParticipantFontSize 14
+    ParticipantFontColor #0078d4
+    
+    ActorBackgroundColor #f0f7ff
+    ActorBorderColor #0078d4
+}
+
+actor "Plant Operator" as User
+participant "FaultDetection UI" as UI <<Boundary>>
+participant "DiagnosticService" as Service <<Control>>
+database "Supabase DB" as DB <<Database>>
+
+autonumber
+
+User -> UI : Navigate to Fault Detection Page
+activate UI
+
+UI -> Service : getActiveFaults()
+activate Service
+
+Service -> DB : SELECT * FROM system_faults\nWHERE status != 'Resolved'
+activate DB
+DB --> Service : List of active/investigating faults
+deactivate DB
+
+Service --> UI : Array of Fault objects
+deactivate Service
+
+UI -> UI : Calculate Aggregate Metrics
+note right : Overall Health % = (100 - weighted_fault_score)\nActive Alert Count = faults.length
+
+UI -> UI : Render Health Metrics & Alert Table
+note right : Styles badges by Severity (High/Med/Low)\nand Status (Active/Investigating).
+
+UI --> User : Display System Health & Active Fault List
+deactivate UI
+
+@enduml

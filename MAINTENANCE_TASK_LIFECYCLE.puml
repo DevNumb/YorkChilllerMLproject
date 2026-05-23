@@ -1,0 +1,42 @@
+@startuml Maintenance Task Lifecycle
+title Figure X: Maintenance Task Status State Machine Diagram
+
+' Professional State Diagram Styling
+skinparam state {
+    BackgroundColor #f0f7ff
+    BorderColor #0078d4
+    ArrowColor #0078d4
+    FontSize 12
+}
+skinparam backgroundColor white
+skinparam shadowing false
+skinparam roundcorner 10
+
+[*] --> Pending : addNewTask()
+note on link: Initial status is 'pending'
+
+state Pending {
+    [*] --> Active
+    Active --> Overdue : Automated refresh\n(Due Date passed)
+    Active : Waiting for maintenance\nperformance
+}
+
+state Completed {
+    Completed : Task logged in history\nNext due date calculated
+}
+
+state Overdue {
+    Overdue : Urgent attention required\nHighlighted in Red
+}
+
+Pending --> Completed : completeTask()
+note right: Manual action by operator
+
+Overdue --> Completed : completeTask()
+note right: Manual action by operator
+
+Completed --> Pending : Automated refresh\n(Within 3 days of Next Due)
+
+Completed --> Overdue : Automated refresh\n(Next Due Date passed)
+
+@enduml

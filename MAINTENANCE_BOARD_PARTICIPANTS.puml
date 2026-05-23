@@ -1,0 +1,78 @@
+@startuml Maintenance Board Participant Diagram
+title Figure X: Maintenance Board Initialization & Data Flow Participant Diagram
+
+' Professional Sequence Diagram Styling
+skinparam actorStyle awesome
+skinparam backgroundColor white
+skinparam handwritten false
+skinparam monochrome false
+skinparam shadowing false
+skinparam roundcorner 10
+skinparam ParticipantPadding 40
+skinparam BoxPadding 10
+
+skinparam sequence {
+    ArrowColor #0078d4
+    LifeLineBorderColor #0078d4
+    LifeLineBackgroundColor #f0f7ff
+    
+    ParticipantBackgroundColor #f0f7ff
+    ParticipantBorderColor #0078d4
+    ParticipantFontSize 14
+    ParticipantFontColor #0078d4
+    
+    ActorBackgroundColor #f0f7ff
+    ActorBorderColor #0078d4
+}
+
+actor "Maintenance Staff" as User
+participant "MaintenanceScheduler" as UI <<Boundary>>
+participant "MaintenanceFilters" as Filters <<Component>>
+participant "MaintenanceStats" as StatsDisplay <<Component>>
+participant "SupabaseService" as Service <<Control>>
+database "Supabase DB" as DB <<Database>>
+
+autonumber
+
+User -> UI : Navigate to Maintenance Page
+activate UI
+
+== Data Fetching & Status Refresh ==
+UI -> Service : refreshTaskStatuses()
+activate Service
+Service -> DB : SELECT * FROM maintenance_tasks
+activate DB
+DB --> Service : tasks
+deactivate DB
+Service -> DB : UPDATE status for overdue/pending tasks
+Service --> UI : Array of current tasks
+deactivate Service
+
+UI -> Service : getYearlyStats(currentYear)
+activate Service
+Service -> DB : SELECT * FROM maintenance_stats
+activate DB
+DB --> Service : stats
+deactivate DB
+Service --> UI : stats
+deactivate Service
+
+UI -> StatsDisplay : Update KPI Cards (Completion %, Overdue Count)
+
+== User Interaction (Filtering) ==
+User -> Filters : Input Search or Category Filter
+activate Filters
+Filters -> UI : onSearchChange() / onCategoryChange()
+deactivate Filters
+
+UI -> UI : filteredTasks = tasks.filter(...)
+UI -> UI : Render TaskItem components
+
+note right of UI
+  **Local Filtering:**
+  The board filters and sorts
+  data client-side for near-
+  instant UI responsiveness.
+end note
+
+@enduml

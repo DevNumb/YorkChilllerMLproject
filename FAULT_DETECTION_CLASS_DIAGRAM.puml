@@ -1,0 +1,66 @@
+@startuml FAULT_DETECTION_CLASS_DIAGRAM
+skinparam backgroundColor #FFFFFF
+skinparam classAttributeIconSize 0
+
+package "Frontend Pages" {
+    class FaultDetection << (C,#ADD1B2) Component >> {
+        - coolingLoad: Number
+        - wetBulb: Number
+        - chiller1: Object
+        - chiller2: Number
+        - chiller3: Object
+        - anomalyScores: Array
+        - faults: Array
+        + runDiagnostics(): void
+        + callFaultDetectionAPI(): Object
+    }
+}
+
+package "Services" {
+    class SupabaseDashboardService << (S,#FFE082) Service >> {
+        + saveFaultDetectionHistory(data: Object): Promise<void>
+        + getFaultDetectionHistory(limit: Number): Promise<Array>
+    }
+
+    class SupabaseClient << (S,#FFE082) Service >> {
+        + supabase: Object
+    }
+}
+
+package "Remote ML API" #F1F8E9 {
+    class GradioInferenceService << (A,#B39DDB) API >> {
+        + /gradio_api/call/predict (POST)
+        + /gradio_api/call/predict/{id} (GET)
+    }
+}
+
+package "Data Models" {
+    class FaultHistoryRecord {
+        + id: UUID
+        + timestamp: DateTime
+        + cooling_load: Number
+        + wet_bulb: Number
+        + chiller_data: JSONB
+        + prediction: String
+        + fault_score: Number
+    }
+
+    class MLPayload {
+        + data: String[]
+    }
+
+    class MLResult {
+        + prediction: String
+        + fault_score: Number
+    }
+}
+
+' Relationships
+FaultDetection --> SupabaseDashboardService : uses
+FaultDetection ..> GradioInferenceService : consumes
+SupabaseDashboardService --> SupabaseClient : uses
+SupabaseDashboardService ..> FaultHistoryRecord : manages
+FaultDetection ..> MLPayload : creates
+FaultDetection ..> MLResult : parses
+
+@enduml

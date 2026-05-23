@@ -1,0 +1,67 @@
+@startuml Update Task Status Sequence Diagram
+title Figure X: Maintenance - Automated Task Status Refresh Sequence Diagram
+
+' Professional Sequence Diagram Styling
+skinparam actorStyle awesome
+skinparam backgroundColor white
+skinparam handwritten false
+skinparam monochrome false
+skinparam shadowing false
+skinparam roundcorner 10
+skinparam ParticipantPadding 40
+skinparam BoxPadding 10
+
+skinparam sequence {
+    ArrowColor #0078d4
+    LifeLineBorderColor #0078d4
+    LifeLineBackgroundColor #f0f7ff
+    
+    ParticipantBackgroundColor #f0f7ff
+    ParticipantBorderColor #0078d4
+    ParticipantFontSize 14
+    ParticipantFontColor #0078d4
+    
+    ActorBackgroundColor #f0f7ff
+    ActorBorderColor #0078d4
+}
+
+participant "Maintenance Page" as UI <<Boundary>>
+participant "SupabaseMaintenanceService" as Service <<Control>>
+database "Supabase DB" as DB <<Database>>
+
+autonumber
+
+UI -> Service : refreshTaskStatuses()
+activate Service
+
+Service -> DB : SELECT * FROM maintenance_tasks
+activate DB
+DB --> Service : List of Tasks
+deactivate DB
+
+loop For each task in list
+    Service -> Service : Check nextDue date vs Now
+    
+    alt Status is 'completed' AND nextDue <= Now
+        Service -> Service : Set newStatus = 'overdue'
+    else Status is 'completed' AND nextDue within 3 days
+        Service -> Service : Set newStatus = 'pending'
+    else Status is 'pending' AND nextDue <= Now
+        Service -> Service : Set newStatus = 'overdue'
+    end
+
+    alt newStatus != current status
+        Service -> DB : UPDATE status = newStatus WHERE id = taskId
+        activate DB
+        DB --> Service : Success
+        deactivate DB
+    end
+end
+
+Service --> UI : Array of Updated Tasks
+deactivate Service
+
+UI -> UI : Update UI State (tasks)
+UI -> UI : Render Task List with New Status Badges
+
+@enduml

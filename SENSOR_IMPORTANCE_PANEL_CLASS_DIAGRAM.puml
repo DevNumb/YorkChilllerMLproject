@@ -1,0 +1,66 @@
+@startuml Sensor Variable Importance Panel Class Diagram
+title Figure X: Sensor Variable Importance Panel - Class Diagram
+
+' Professional Class Diagram Styling
+skinparam class {
+    BackgroundColor #f0f7ff
+    BorderColor #0078d4
+    ArrowColor #0078d4
+}
+skinparam package {
+    BackgroundColor #ffffff
+    BorderColor #0078d4
+}
+
+package "UI Components" {
+    class SensorImportancePanel <<Component>> {
+        - targetId: string
+        - contributors: SensorContribution[]
+        - isLoading: boolean
+        - chartType: string
+        + fetchImportanceData(id)
+        + handleChartTypeChange(type)
+        + render()
+    }
+
+    class ImportanceBarChart <<Component>> {
+        - data: SensorContribution[]
+        + render()
+    }
+}
+
+package "Service Layer" {
+    class ExplainabilityService <<Control>> {
+        + getFeatureContributions(targetId): SensorContribution[]
+        - normalizeWeights(rawWeights): SensorContribution[]
+    }
+
+    class AIModelAPI <<System>> {
+        + explain(features): rawWeights
+    }
+}
+
+package "Models/Interfaces" {
+    class SensorContribution {
+        + sensorName: string
+        + sensorKey: string
+        + importanceWeight: number
+        + impactType: string (Positive/Negative)
+    }
+
+    class ImportanceReport {
+        + targetId: string
+        + summary: string
+        + topContributors: SensorContribution[]
+    }
+}
+
+' Relationships
+SensorImportancePanel ..> ExplainabilityService : uses
+SensorImportancePanel "1" *-- "many" SensorContribution
+SensorImportancePanel *-- ImportanceBarChart : renders
+ExplainabilityService ..> AIModelAPI : calls
+ExplainabilityService ..> ImportanceReport : generates
+ImportanceReport "1" *-- "many" SensorContribution
+
+@enduml

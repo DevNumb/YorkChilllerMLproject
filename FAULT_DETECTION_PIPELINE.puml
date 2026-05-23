@@ -1,0 +1,49 @@
+@startuml FAULT_DETECTION_PIPELINE
+skinparam backgroundColor #FFFFFF
+skinparam componentStyle rectangle
+
+package "Data Layer" {
+    component "UI Input Fields" as UI
+    component "Supabase History" as DB
+}
+
+package "Preprocessing" {
+    component "Data Normalization" as Normalize
+    component "JSON Stringification" as Stringify
+}
+
+package "ML Inference (Remote)" #F1F8E9 {
+    component "Gradio API Gateway" as API
+    component "Feature Scaling" as Scaler
+    component "Random Forest Classifier" as Model
+}
+
+package "Post-processing" {
+    component "SSE Stream Parser" as Parser
+    component "Result Mapping" as Mapper
+}
+
+package "Visualization" {
+    component "Anomaly Score Panel" as Scores
+    component "Alert History Table" as Table
+}
+
+' Flow
+UI --> Stringify : Raw Parameters
+Stringify --> API : POST (Request)
+API --> Scaler : Features
+Scaler --> Model : Tensors
+Model --> API : [Prediction, Score]
+API --> Parser : GET (Polling Response)
+Parser --> Mapper : JSON Object
+Mapper --> Scores : Update Value %
+Mapper --> Table : New Entry (if Fault)
+Mapper --> DB : Persist Scan Record
+
+note bottom of Model
+  Training: Historical HVAC Data
+  Algorithm: Random Forest
+  Output: Boolean Classification
+end note
+
+@enduml

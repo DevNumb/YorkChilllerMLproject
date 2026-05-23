@@ -1,0 +1,81 @@
+@startuml View Recommendations Sequence Diagram
+title Figure X: Sprint 1 — View Recommendations Sequence Diagram
+
+' Professional Sequence Diagram Styling
+skinparam actorStyle awesome
+skinparam backgroundColor white
+skinparam handwritten false
+skinparam monochrome false
+skinparam shadowing false
+skinparam roundcorner 10
+skinparam ParticipantPadding 40
+skinparam BoxPadding 10
+
+skinparam sequence {
+    ArrowColor #0078d4
+    LifeLineBorderColor #0078d4
+    LifeLineBackgroundColor #f0f7ff
+    
+    ParticipantBackgroundColor #f0f7ff
+    ParticipantBorderColor #0078d4
+    ParticipantFontSize 14
+    ParticipantFontColor #0078d4
+    
+    ActorBackgroundColor #f0f7ff
+    ActorBorderColor #0078d4
+}
+
+skinparam note {
+    BackgroundColor #fff9e6
+    BorderColor #d4a017
+    FontSize 11
+}
+
+actor "Plant Operator" as User
+participant "Dashboard UI" as UI <<Boundary>>
+participant "ChillerOptimizer" as Optimizer <<Control>>
+participant "ML Model API" as ML <<External Service>>
+participant "SupabaseService" as Service <<Service>>
+database "Supabase DB" as DB <<Database>>
+
+autonumber
+
+User -> UI : Adjust Inputs (Load, Wet Bulb, etc.)
+User -> UI : Click "Get Recommendation"
+activate UI
+
+UI -> Optimizer : calculateSavings(inputs)
+activate Optimizer
+
+Optimizer -> ML : POST features (Baseline)
+activate ML
+ML --> Optimizer : Baseline Efficiency (kW/ton)
+deactivate ML
+
+loop For each scenario (staging, setpoints)
+    Optimizer -> ML : POST features (Optimized Scenario)
+    activate ML
+    ML --> Optimizer : Scenario Efficiency (kW/ton)
+    deactivate ML
+end
+
+Optimizer -> Optimizer : Identify Minimum kW/ton
+Optimizer --> UI : Optimal Config & Savings Metrics
+deactivate Optimizer
+
+UI -> Service : saveOptimizationHistory(result)
+activate Service
+Service -> DB : INSERT optimization_record
+activate DB
+DB --> Service : Success
+deactivate DB
+Service --> UI : Acknowledgment
+deactivate Service
+
+UI -> UI : Render AI Recommendations Panel
+note right: Display: Improvement %,\nPower Saved (kW),\nOperator Action Text,\nComponent Setpoints Table
+
+UI --> User : Display Recommendations & Metrics
+deactivate UI
+
+@enduml

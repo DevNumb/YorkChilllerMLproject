@@ -1,0 +1,32 @@
+@startuml Cost Savings Use Case Diagram
+
+left to right direction
+
+actor "Plant Operator" as Operator
+actor "Supabase" as DB <<System>>
+
+package "Cost Savings Module" {
+    usecase "View Lifetime Total Savings" as UC_Lifetime
+    usecase "View 1-Week Savings Estimate" as UC_Estimate
+    usecase "View Monthly Savings Trend" as UC_Trend
+    usecase "View Impact Breakdown (Pie Chart)" as UC_Breakdown
+    usecase "Monitor Environmental Impact (CO2)" as UC_CO2
+    usecase "Analyze Financial ROI of AI" as UC_ROI
+}
+
+' Operator Actions
+Operator --> UC_Lifetime
+Operator --> UC_Estimate
+Operator --> UC_Trend
+Operator --> UC_Breakdown
+Operator --> UC_CO2
+Operator --> UC_ROI
+
+' System Interactions
+UC_Lifetime ..> DB : reads optimization stats
+UC_Estimate ..> DB : reads recent history
+UC_Trend ..> DB : aggregates historical records
+UC_Breakdown ..> DB : reads total cost & CO2 data
+UC_ROI ..> DB : reads historical impact data
+
+@enduml

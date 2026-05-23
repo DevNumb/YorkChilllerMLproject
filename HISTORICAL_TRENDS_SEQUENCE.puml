@@ -1,0 +1,74 @@
+@startuml Historical Trends Sequence Diagram
+title Figure X: Historical Optimization Trends Sequence Diagram
+
+' Professional Sequence Diagram Styling
+skinparam actorStyle awesome
+skinparam backgroundColor white
+skinparam handwritten false
+skinparam monochrome false
+skinparam shadowing false
+skinparam roundcorner 10
+skinparam ParticipantPadding 40
+skinparam BoxPadding 10
+
+skinparam sequence {
+    ArrowColor #0078d4
+    LifeLineBorderColor #0078d4
+    LifeLineBackgroundColor #f0f7ff
+    
+    ParticipantBackgroundColor #f0f7ff
+    ParticipantBorderColor #0078d4
+    ParticipantFontSize 14
+    ParticipantFontColor #0078d4
+    
+    ActorBackgroundColor #f0f7ff
+    ActorBorderColor #0078d4
+}
+
+skinparam note {
+    BackgroundColor #fff9e6
+    BorderColor #d4a017
+    FontSize 11
+}
+
+actor "Plant Operator" as User
+participant "Dashboard / Cost UI" as UI <<Boundary>>
+participant "SupabaseDashboardService" as Service <<Control>>
+database "Supabase DB" as DB <<Database>>
+
+autonumber
+
+User -> UI : Select "Trends" or Load Analytics Page
+activate UI
+
+UI -> Service : getOptimizationHistory(limit)
+activate Service
+
+Service -> DB : SELECT * FROM dashboard_optimization_history\nORDER BY timestamp DESC
+activate DB
+DB --> Service : List of raw history records
+deactivate DB
+
+Service -> Service : mapHistoryFromDb(records)
+note right : Normalizes database snake_case\nto frontend camelCase.
+
+Service --> UI : Array of normalized HistoryEntries
+deactivate Service
+
+UI -> UI : Aggregate Data for Charts
+note right : Groups savings by Month/Week\nCalculates moving averages\nfor efficiency (kW/ton).
+
+UI -> UI : Render BarChart / LineChart (Recharts)
+
+UI --> User : Display Historical Performance Trends
+deactivate UI
+
+note right of Service
+  **Performance Optimization:**
+  Queries are limited and ordered
+  to ensure the dashboard remains
+  responsive even with thousands
+  of historical records.
+end note
+
+@enduml

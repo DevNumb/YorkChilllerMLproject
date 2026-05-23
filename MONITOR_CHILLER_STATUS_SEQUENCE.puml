@@ -1,0 +1,73 @@
+@startuml Monitor Chiller Status Sequence Diagram
+title Figure X: Sprint 1 — Monitor Chiller Status Sequence Diagram
+
+' Professional Sequence Diagram Styling
+skinparam actorStyle awesome
+skinparam backgroundColor white
+skinparam handwritten false
+skinparam monochrome false
+skinparam shadowing false
+skinparam roundcorner 10
+skinparam ParticipantPadding 40
+skinparam BoxPadding 10
+
+skinparam sequence {
+    ArrowColor #0078d4
+    LifeLineBorderColor #0078d4
+    LifeLineBackgroundColor #f0f7ff
+    
+    ParticipantBackgroundColor #f0f7ff
+    ParticipantBorderColor #0078d4
+    ParticipantFontSize 14
+    ParticipantFontColor #0078d4
+    
+    ActorBackgroundColor #f0f7ff
+    ActorBorderColor #0078d4
+}
+
+actor "Plant Operator" as User
+participant "Dashboard / Fault UI" as UI <<Boundary>>
+participant "ChillerOptimizer" as Optimizer <<Control>>
+participant "Diagnostic Engine" as Engine <<Control>>
+participant "ML Model API" as ML <<External Service>>
+database "Supabase" as DB <<Database>>
+
+== Real-Time Status Monitoring ==
+autonumber
+User -> UI : Open Dashboard
+activate UI
+
+UI -> DB : getOptimizationHistory()
+activate DB
+DB --> UI : recent history data
+deactivate DB
+
+UI -> Optimizer : calculateSavings(current_inputs)
+activate Optimizer
+Optimizer -> ML : POST features (Current Baseline)
+activate ML
+ML --> Optimizer : current efficiency (kW/ton)
+deactivate ML
+Optimizer --> UI : Baseline Performance Metrics
+deactivate Optimizer
+
+UI -> UI : Update SystemStatusCard
+note right: Display: Chillers Running,\nEfficiency (kW/ton),\nActive Fault Count
+
+== Manual Diagnostic Scan ==
+User -> UI : Navigate to Fault Detection
+User -> UI : Click "Run Full Diagnostics Scan"
+
+UI -> Engine : runDiagnostics()
+activate Engine
+loop For each subsystem
+    Engine -> Engine : Analyze Sensor Data Patterns
+    Engine -> Engine : Calculate Anomaly Scores
+end
+Engine --> UI : Diagnostics Complete (List of Faults)
+deactivate Engine
+
+UI -> UI : Update Fault List & Health Metrics
+UI --> User : Display Alerts & Anomaly Scores
+
+@enduml

@@ -1,0 +1,83 @@
+@startuml Dashboard Participant Diagram
+title Figure X: Dashboard Optimization Participant Diagram
+
+' Professional Sequence Diagram Styling
+skinparam actorStyle awesome
+skinparam backgroundColor white
+skinparam handwritten false
+skinparam monochrome false
+skinparam shadowing false
+skinparam roundcorner 10
+skinparam ParticipantPadding 40
+skinparam BoxPadding 10
+
+skinparam sequence {
+    ArrowColor #0078d4
+    LifeLineBorderColor #0078d4
+    LifeLineBackgroundColor #f0f7ff
+    
+    ParticipantBackgroundColor #f0f7ff
+    ParticipantBorderColor #0078d4
+    ParticipantFontSize 14
+    ParticipantFontColor #0078d4
+    
+    ActorBackgroundColor #f0f7ff
+    ActorBorderColor #0078d4
+}
+
+skinparam note {
+    BackgroundColor #fff9e6
+    BorderColor #d4a017
+    FontSize 11
+}
+
+actor "Plant Operator" as User
+participant "Dashboard UI" as UI <<Boundary>>
+participant "ChillerOptimizer" as Optimizer <<Control>>
+participant "Weather API" as Weather <<External Service>>
+participant "ML Model API" as ML <<External Service>>
+database "Supabase" as DB <<Database>>
+
+' Interaction Flow
+autonumber
+
+User -> UI : Adjust Inputs & Run Optimization
+activate UI
+
+opt Auto-sync Wet Bulb
+    UI -> Weather : Get Live Weather Data
+    activate Weather
+    Weather --> UI : temperature, humidity, wetBulb
+    deactivate Weather
+end
+
+UI -> Optimizer : calculateSavings(load, weather, settings)
+activate Optimizer
+
+loop for each scenario
+    Optimizer -> ML : POST features for Prediction
+    activate ML
+    ML --> Optimizer : power/efficiency result
+    deactivate ML
+end
+
+Optimizer --> UI : Best result & Recommendations
+deactivate Optimizer
+
+UI -> DB : saveOptimizationHistory(entry)
+activate DB
+DB --> UI : Success Acknowledgment
+deactivate DB
+
+UI --> User : Display Recommendations & Metrics
+deactivate UI
+
+note right of Optimizer
+  **Optimization Logic:**
+  The system iterates through
+  various staging and setpoint
+  combinations to find the 
+  minimum kW/ton.
+end note
+
+@enduml

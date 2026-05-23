@@ -1,0 +1,33 @@
+@startuml Energy Forecasting Use Case Diagram
+
+left to right direction
+
+actor "Plant Operator" as Operator
+actor "Chiller Optimizer" as Optimizer <<Service>>
+database "Local Storage" as Storage <<System>>
+
+package "Energy Forecasting Module" {
+    usecase "View 24-Hour Energy Profile" as UC_ViewProfile
+    usecase "Generate Tomorrow's Forecast" as UC_GenForecast
+    usecase "Refresh Forecast Data" as UC_Refresh
+    usecase "Run Hypothetical Scenario Simulation" as UC_Simulate
+    usecase "View Projected Daily Summary" as UC_Summary
+    usecase "Adjust Hypothetical Inputs" as UC_Adjust
+}
+
+' Operator Actions
+Operator --> UC_ViewProfile
+Operator --> UC_GenForecast
+Operator --> UC_Refresh
+Operator --> UC_Simulate
+Operator --> UC_Summary
+Operator --> UC_Adjust
+
+' System Interactions
+UC_GenForecast ..> Optimizer : calls for calculation
+UC_GenForecast ..> Storage : caches result
+UC_Refresh ..> Optimizer : triggers recalculation
+UC_Simulate ..> Optimizer : calls for prediction
+UC_ViewProfile ..> Storage : reads from cache
+
+@enduml

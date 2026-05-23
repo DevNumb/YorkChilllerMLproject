@@ -1,0 +1,40 @@
+@startuml FAULT_DETECTION_USE_CASE
+skinparam backgroundColor #FFFFFF
+skinparam packageStyle rectangle
+skinparam usecase {
+    BackgroundColor #E3F2FD
+    BorderColor #1976D2
+    ArrowColor #1976D2
+}
+
+actor "Plant Operator" as User
+actor "External ML API" as ML_Service << System >>
+database "Supabase DB" as DB
+
+rectangle "Chiller Plant Dashboard - Fault Detection" {
+    usecase "Input System Parameters" as UC1
+    usecase "Run Diagnostics Scan" as UC2
+    usecase "Analyze Sensor Patterns (ML)" as UC3
+    usecase "View Prediction Result" as UC4
+    usecase "Persist Scan History" as UC5
+    usecase "Monitor Anomaly Scores" as UC6
+}
+
+User --> UC1
+User --> UC2
+User --> UC4
+User --> UC6
+
+UC2 ..> UC3 : <<invoke>>
+UC3 -- ML_Service
+
+UC3 ..> UC4 : <<include>>
+UC4 ..> UC5 : <<include>>
+UC5 -- DB
+
+note right of UC3
+  Endpoint: devnumb-fault.hf.space
+  Protocol: POST -> GET (Polling)
+end note
+
+@enduml

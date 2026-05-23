@@ -1,0 +1,84 @@
+@startuml AI Assistant Participant Diagram
+title Figure X: AI Assistant Interaction Participant Diagram
+
+' Professional Sequence Diagram Styling
+skinparam actorStyle awesome
+skinparam backgroundColor white
+skinparam handwritten false
+skinparam monochrome false
+skinparam shadowing false
+skinparam roundcorner 10
+skinparam ParticipantPadding 40
+skinparam BoxPadding 10
+
+skinparam sequence {
+    ArrowColor #0078d4
+    LifeLineBorderColor #0078d4
+    LifeLineBackgroundColor #f0f7ff
+    
+    ParticipantBackgroundColor #f0f7ff
+    ParticipantBorderColor #0078d4
+    ParticipantFontSize 14
+    ParticipantFontColor #0078d4
+    
+    ActorBackgroundColor #f0f7ff
+    ActorBorderColor #0078d4
+}
+
+skinparam note {
+    BackgroundColor #fff9e6
+    BorderColor #d4a017
+    FontSize 11
+}
+
+actor "Plant Operator" as User
+participant "AIChatAssistant.jsx" as UI <<Boundary>>
+participant "AssistantService.js" as Service <<Control>>
+participant "DashboardContext.js" as Context <<System>>
+participant "LLM API" as LLM <<External Service>>
+database "LocalStorage" as LS <<Database>>
+
+autonumber
+
+User -> UI : Enter Question & Click "Send"
+activate UI
+
+UI -> UI : createUserMessage(content)
+UI -> UI : updateThreads(state)
+
+UI -> Service : sendAssistantMessage({question, context, settings, conversation})
+activate Service
+
+Service -> Context : getDashboardContext()
+activate Context
+Context --> Service : Real-time plant data
+deactivate Context
+
+Service -> LLM : POST request (question + context + history)
+activate LLM
+LLM --> Service : JSON {reply, chart, suggestedTitle}
+deactivate LLM
+
+Service --> UI : {reply, chart, model}
+deactivate Service
+
+UI -> UI : normalizeChartSpec(chart)
+UI -> UI : createAssistantMessage(reply)
+
+UI -> LS : saveAssistantThread(updatedThread)
+activate LS
+LS --> UI : Success
+deactivate LS
+
+UI --> User : Display AI Response & Generated Charts
+deactivate UI
+
+note right of Service
+  **Context Enrichment:**
+  The service injects current
+  load, efficiency, and wet bulb
+  data so the AI "knows" what 
+  the plant is doing.
+end note
+
+@enduml

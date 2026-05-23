@@ -1,0 +1,74 @@
+@startuml Fault Detection Participant Diagram
+title Figure X: Fault Detection & Diagnostic Scan Participant Diagram
+
+' Professional Sequence Diagram Styling
+skinparam actorStyle awesome
+skinparam backgroundColor white
+skinparam handwritten false
+skinparam monochrome false
+skinparam shadowing false
+skinparam roundcorner 10
+skinparam ParticipantPadding 40
+skinparam BoxPadding 10
+
+skinparam sequence {
+    ArrowColor #0078d4
+    LifeLineBorderColor #0078d4
+    LifeLineBackgroundColor #f0f7ff
+    
+    ParticipantBackgroundColor #f0f7ff
+    ParticipantBorderColor #0078d4
+    ParticipantFontSize 14
+    ParticipantFontColor #0078d4
+    
+    ActorBackgroundColor #f0f7ff
+    ActorBorderColor #0078d4
+}
+
+skinparam note {
+    BackgroundColor #fff9e6
+    BorderColor #d4a017
+    FontSize 11
+}
+
+actor "Plant Operator" as User
+participant "FaultDetection UI" as UI <<Boundary>>
+participant "Diagnostic Engine" as Engine <<Control>>
+participant "AI Model API" as AI <<External Service>>
+database "Supabase" as DB <<Database>>
+
+autonumber
+
+User -> UI : Click "Run Full Diagnostics Scan"
+activate UI
+
+UI -> Engine : runDiagnostics()
+activate Engine
+
+loop for each subsystem (Compressor, Condenser, Sensors)
+    Engine -> AI : Analyze sensor patterns (POST features)
+    activate AI
+    AI --> Engine : Anomaly Score & Failure Probability
+    deactivate AI
+    
+    Engine -> Engine : Evaluate against thresholds
+end
+
+Engine --> UI : Diagnostic Results (List of Alerts)
+deactivate Engine
+
+UI -> UI : Update Local State (faults)
+UI -> UI : showToast("Scan Complete")
+
+UI --> User : Display New Alerts & Health Scores
+deactivate UI
+
+note right of Engine
+  **Pattern Recognition:**
+  The engine uses the AI Model
+  to differentiate between
+  normal operational noise
+  and actual mechanical faults.
+end note
+
+@enduml

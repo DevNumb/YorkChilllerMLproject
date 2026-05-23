@@ -1,0 +1,87 @@
+@startuml Energy Forecasting Participant Diagram
+title Figure X: Energy Forecasting Participant Diagram
+
+' Professional Sequence Diagram Styling
+skinparam actorStyle awesome
+skinparam backgroundColor white
+skinparam handwritten false
+skinparam monochrome false
+skinparam shadowing false
+skinparam roundcorner 10
+skinparam ParticipantPadding 40
+skinparam BoxPadding 10
+
+skinparam sequence {
+    ArrowColor #0078d4
+    LifeLineBorderColor #0078d4
+    LifeLineBackgroundColor #f0f7ff
+    
+    ParticipantBackgroundColor #f0f7ff
+    ParticipantBorderColor #0078d4
+    ParticipantFontSize 14
+    ParticipantFontColor #0078d4
+    
+    ActorBackgroundColor #f0f7ff
+    ActorBorderColor #0078d4
+}
+
+skinparam note {
+    BackgroundColor #fff9e6
+    BorderColor #d4a017
+    FontSize 11
+}
+
+actor "Plant Operator" as User
+participant "EnergyForecasting.jsx" as UI <<Boundary>>
+participant "ChillerOptimizer" as Optimizer <<Control>>
+participant "ML Model API" as ML <<External Service>>
+database "LocalStorage" as LS <<Database>>
+
+== 24-Hour Forecast Generation ==
+autonumber
+
+User -> UI : Load Page / Click "Refresh Forecast"
+activate UI
+
+loop for each 3-hour interval (8 iterations)
+    UI -> Optimizer : calculateSavings(load, wetBulb, hour, ...)
+    activate Optimizer
+    Optimizer -> ML : POST features for Prediction
+    activate ML
+    ML --> Optimizer : Power/Efficiency Result
+    deactivate ML
+    Optimizer --> UI : Savings Metrics
+    deactivate Optimizer
+end
+
+UI -> UI : Aggregate Daily Summary (kWh, avg kW/ton)
+UI -> LS : writeForecastCache(payload)
+UI --> User : Render 24-Hour Profile Chart & Summary
+
+== Hypothetical Scenario Simulation ==
+
+User -> UI : Adjust Scenario Inputs (Load, Wet Bulb, Setpoint)
+User -> UI : Click "Run Simulation"
+
+UI -> Optimizer : calculateSavings(manual_inputs)
+activate Optimizer
+Optimizer -> ML : POST features for Prediction
+activate ML
+ML --> Optimizer : Prediction Result
+deactivate ML
+Optimizer --> UI : Simulation Metrics
+deactivate Optimizer
+
+UI -> UI : Update "Projected Impact" Cards
+UI --> User : Display Simulation Results
+
+deactivate UI
+
+note right of UI
+  **Optimization Loop:**
+  The 24h forecast runs multiple
+  parallel/sequential API calls
+  to build the tomorrow profile.
+end note
+
+@enduml

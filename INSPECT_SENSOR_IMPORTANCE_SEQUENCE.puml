@@ -1,0 +1,72 @@
+@startuml Inspect Sensor Importance Sequence Diagram
+title Figure X: Fault Detection - Inspect Sensor Importance & Explainability Sequence Diagram
+
+' Professional Sequence Diagram Styling
+skinparam actorStyle awesome
+skinparam backgroundColor white
+skinparam handwritten false
+skinparam monochrome false
+skinparam shadowing false
+skinparam roundcorner 10
+skinparam ParticipantPadding 40
+skinparam BoxPadding 10
+
+skinparam sequence {
+    ArrowColor #0078d4
+    LifeLineBorderColor #0078d4
+    LifeLineBackgroundColor #f0f7ff
+    
+    ParticipantBackgroundColor #f0f7ff
+    ParticipantBorderColor #0078d4
+    ParticipantFontSize 14
+    ParticipantFontColor #0078d4
+    
+    ActorBackgroundColor #f0f7ff
+    ActorBorderColor #0078d4
+}
+
+skinparam note {
+    BackgroundColor #fff9e6
+    BorderColor #d4a017
+    FontSize 11
+}
+
+actor "Plant Operator" as User
+participant "FaultDetection UI" as UI <<Boundary>>
+participant "Diagnostic Engine" as Engine <<Control>>
+participant "AI Model API" as AI <<External Service>>
+
+autonumber
+
+User -> UI : Select Active Fault (e.g., "Efficiency Drop")
+User -> UI : Click "Inspect Sensor Importance"
+activate UI
+
+UI -> Engine : getSensorContribution(faultId)
+activate Engine
+
+Engine -> AI : POST /api/explain (sensor_features)
+activate AI
+note right of AI : Calculates Feature Importance\n(e.g., SHAP or LIME values)
+AI --> Engine : { contributions: [ {sensor: 'vibration', weight: 0.8}, ... ] }
+deactivate AI
+
+Engine -> Engine : Normalize Weights to Percentages
+Engine --> UI : Ranked Sensor Importance List
+deactivate Engine
+
+UI -> UI : Render Importance Chart
+note right : Visualizes which sensors\ndrove the AI's decision.
+
+UI --> User : Display Ranked Contributors (e.g., "Vibration: 80%")
+deactivate UI
+
+note right of UI
+  **Explainability:**
+  This process translates "Black Box"
+  AI decisions into actionable 
+  engineering insights for the 
+  maintenance team.
+end note
+
+@enduml

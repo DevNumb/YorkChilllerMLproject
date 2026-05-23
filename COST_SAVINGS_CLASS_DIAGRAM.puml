@@ -1,0 +1,68 @@
+@startuml Cost Savings Class Diagram
+title Figure X: Cost Savings Module Class Diagram
+
+' Professional Class Diagram Styling
+skinparam class {
+    BackgroundColor #f0f7ff
+    BorderColor #0078d4
+    ArrowColor #0078d4
+}
+skinparam package {
+    BackgroundColor #ffffff
+    BorderColor #0078d4
+}
+
+package "UI Layer" {
+    class CostSavingsDashboard <<Component>> {
+        - stats: OptimizationStats
+        - weeklyProjected: number
+        - monthlyData: MonthlySavings[]
+        - loading: boolean
+        + loadData()
+    }
+}
+
+package "Service Layer" {
+    class SupabaseDashboardService <<Service>> {
+        + getOptimizationStats(days): OptimizationStats
+        + getOptimizationHistory(limit): HistoryEntry[]
+        - mapHistoryFromDb(dbRecord): HistoryEntry
+    }
+}
+
+package "Models/Interfaces" {
+    class OptimizationStats {
+        + totalRecommendations: number
+        + totalPowerSaved: number
+        + totalCostSaved: number
+        + totalCo2Reduced: number
+        + averageImprovement: number
+    }
+
+    class MonthlySavings {
+        + month: string
+        + savings: number
+    }
+
+    class HistoryEntry {
+        + id: string
+        + timestamp: string
+        + result: SavingsResult
+    }
+
+    class SavingsResult {
+        + costSavingsUsd: number
+        + powerSavedKw: number
+        + co2ReductionKg: number
+    }
+}
+
+' Relationships
+CostSavingsDashboard ..> SupabaseDashboardService : uses
+CostSavingsDashboard "1" *-- "1" OptimizationStats
+CostSavingsDashboard "1" *-- "many" MonthlySavings
+SupabaseDashboardService ..> OptimizationStats : returns
+SupabaseDashboardService ..> HistoryEntry : returns
+HistoryEntry *-- SavingsResult
+
+@enduml

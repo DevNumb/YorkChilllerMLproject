@@ -1,0 +1,117 @@
+@startuml AI Assistant Class Diagram
+title Figure X: AI Assistant Class Diagram (Sprint 1 Refined)
+
+' Professional Class Diagram Styling
+skinparam class {
+    BackgroundColor #f0f7ff
+    BorderColor #0078d4
+    ArrowColor #0078d4
+}
+skinparam package {
+    BackgroundColor #ffffff
+    BorderColor #0078d4
+}
+
+package "UI Components" {
+    class AIChatEnhanced <<Component>> {
+        - assistantContext: AssistantContextSpec
+        - exampleQuestions: string[]
+        + render()
+    }
+
+    class AIChatAssistant <<Component>> {
+        - threads: AssistantThread[]
+        - activeThreadId: string
+        - activeSection: string
+        - settings: AssistantSettings
+        - context: AssistantContextSpec
+        + handleSubmit(e: Event)
+        + handleNewThread()
+        + handleDeleteThread(id)
+        + handleSaveSettings(e)
+    }
+
+    class AssistantChart <<Component>> {
+        - chartSpec: NormalizedChart
+        + render()
+    }
+}
+
+package "Service Layer" {
+    class AssistantService <<Control>> {
+        + sendAssistantMessage(params): AssistantResponse
+    }
+
+    class AssistantStorage <<Service>> {
+        - DB_NAME: string
+        - THREADS_STORE: string
+        + loadAssistantThreads(): AssistantThread[]
+        + saveAssistantThread(thread)
+        + deleteAssistantThread(id)
+        + loadAssistantSettings(): AssistantSettings
+        + saveAssistantSettings(settings)
+    }
+
+    class AssistantContext <<Utility>> {
+        + buildAssistantContext(dashboardData): AssistantContextSpec
+        - normalizeWeather(weather)
+        - normalizeInputs(inputs)
+        - normalizeRecommendation(result)
+    }
+
+    class ChartUtils <<Utility>> {
+        + normalizeChartSpec(rawChart): NormalizedChart
+        + buildFallbackCharts(context): NormalizedChart[]
+    }
+}
+
+package "Models/Data Structures" {
+    class AssistantThread {
+        + id: string
+        + title: string
+        + messages: Message[]
+        + charts: NormalizedChart[]
+        + createdAt: string
+        + updatedAt: string
+    }
+
+    class Message {
+        + id: string
+        + role: string
+        + content: string
+        + model: string
+        + timestamp: string
+    }
+
+    class AssistantSettings {
+        + model: string
+        + apiUrl: string
+        + autoOpenCharts: boolean
+        + saveChats: boolean
+    }
+
+    class NormalizedChart {
+        + type: string
+        + title: string
+        + unit: string
+        + labels: string[]
+        + series: ChartSeries[]
+    }
+}
+
+' Relationships
+AIChatEnhanced *-- AIChatAssistant : wraps
+AIChatAssistant ..> AssistantService : uses
+AIChatAssistant ..> AssistantStorage : uses
+AIChatAssistant ..> ChartUtils : uses
+AIChatAssistant "1" *-- "many" AssistantThread
+AIChatAssistant "1" *-- "1" AssistantSettings
+AIChatAssistant ..> AssistantChart : renders
+
+AssistantThread "1" *-- "many" Message
+AssistantThread "1" *-- "many" NormalizedChart
+
+AssistantService ..> AssistantContext : utilizes
+AssistantService ..> AssistantSettings : utilizes
+
+@enduml

@@ -1,0 +1,91 @@
+@startuml Dashboard Class Diagram
+title Figure X: Sprint 1 — Dashboard Class Diagram
+
+' Professional Styling
+skinparam class {
+    BackgroundColor #f0f7ff
+    BorderColor #0078d4
+    ArrowColor #0078d4
+}
+skinparam package {
+    BackgroundColor #ffffff
+    BorderColor #0078d4
+}
+
+package "UI Layer" {
+    class Dashboard <<Component>> {
+        - inputs: OptimizationInputs
+        - result: OptimizationHistoryEntry
+        - history: OptimizationHistoryEntry[]
+        - weather: WeatherData
+        + runOptimization()
+        + updateInput(name, value)
+        + loadWeather()
+    }
+}
+
+package "Service Layer" {
+    class ChillerOptimizer <<Control>> {
+        + calculateSavings(load, wetBulb, ...): SavingsResult
+        - callPredictionAPI(payload): number
+        - buildFeatures(...): PredictionInput12
+    }
+
+    class SupabaseDashboardService <<Service>> {
+        + saveOptimizationHistory(entry): OptimizationHistoryEntry
+        + getOptimizationHistory(limit): OptimizationHistoryEntry[]
+        + getOptimizationStats(days): OptimizationStats
+        - mapHistoryToDb(entry): DbRecord
+        - mapHistoryFromDb(dbRecord): OptimizationHistoryEntry
+    }
+}
+
+package "External APIs" {
+    class MLModelAPI <<System>> {
+        + predict(features): kwPerTr
+    }
+    class WeatherAPI <<System>> {
+        + getForecast(lat, lon): temperature, humidity
+    }
+}
+
+package "Models/Interfaces" {
+    class OptimizationInputs {
+        + load_tons: number
+        + wet_bulb_c: number
+        + current_chw_setpoint_c: number
+        + chillers_running: number
+    }
+
+    class SavingsResult {
+        + powerSaved: number
+        + improvementPercent: number
+        + costSavingsPerHour: number
+        + currentConfig: Config
+        + optimalConfig: Config
+    }
+
+    class OptimizationHistoryEntry {
+        + id: string
+        + timestamp: string
+        + inputs: OptimizationInputs
+        + result: SavingsResult
+    }
+    
+    class OptimizationStats {
+        + totalPowerSaved: number
+        + totalCostSaved: number
+        + totalCo2Reduced: number
+    }
+}
+
+' Relationships
+Dashboard ..> ChillerOptimizer : uses
+Dashboard ..> SupabaseDashboardService : uses
+Dashboard ..> WeatherAPI : fetches from
+ChillerOptimizer ..> MLModelAPI : calls
+SupabaseDashboardService ..> OptimizationHistoryEntry : manages
+OptimizationHistoryEntry *-- OptimizationInputs
+OptimizationHistoryEntry *-- SavingsResult
+
+@enduml

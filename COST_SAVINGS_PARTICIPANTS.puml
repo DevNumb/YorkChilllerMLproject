@@ -1,0 +1,78 @@
+@startuml Cost Savings Participant Diagram
+title Figure X: Cost Savings Data Aggregation Participant Diagram
+
+' Professional Sequence Diagram Styling
+skinparam actorStyle awesome
+skinparam backgroundColor white
+skinparam handwritten false
+skinparam monochrome false
+skinparam shadowing false
+skinparam roundcorner 10
+skinparam ParticipantPadding 40
+skinparam BoxPadding 10
+
+skinparam sequence {
+    ArrowColor #0078d4
+    LifeLineBorderColor #0078d4
+    LifeLineBackgroundColor #f0f7ff
+    
+    ParticipantBackgroundColor #f0f7ff
+    ParticipantBorderColor #0078d4
+    ParticipantFontSize 14
+    ParticipantFontColor #0078d4
+    
+    ActorBackgroundColor #f0f7ff
+    ActorBorderColor #0078d4
+}
+
+skinparam note {
+    BackgroundColor #fff9e6
+    BorderColor #d4a017
+    FontSize 11
+}
+
+actor "Plant Operator" as User
+participant "CostSavingsDashboard.jsx" as UI <<Boundary>>
+participant "SupabaseDashboardService" as Service <<Control>>
+database "Supabase DB" as DB <<Database>>
+
+autonumber
+
+User -> UI : Open Cost Savings Dashboard
+activate UI
+
+UI -> Service : getOptimizationStats(30 days)
+activate Service
+Service -> DB : SELECT stats FROM history
+activate DB
+DB --> Service : aggregated stats
+deactivate DB
+Service --> UI : { totalCost, totalCo2, ... }
+deactivate Service
+
+UI -> Service : getOptimizationHistory(100 entries)
+activate Service
+Service -> DB : SELECT * FROM history ORDER BY date
+activate DB
+DB --> Service : raw history entries
+deactivate DB
+Service --> UI : array of history entries
+deactivate Service
+
+UI -> UI : calculateWeeklyProjection(history)
+UI -> UI : groupByMonth(history)
+note right : Aggregates USD savings\ninto monthly buckets for chart.
+
+UI -> UI : Render BarChart (Trends)
+UI -> UI : Render PieChart (Breakdown)
+UI --> User : Display Financial Impact & ROI
+deactivate UI
+
+note right of UI
+  **Data Synthesis:**
+  The UI synthesizes raw history
+  into actionable financial metrics
+  and environmental impact stats.
+end note
+
+@enduml

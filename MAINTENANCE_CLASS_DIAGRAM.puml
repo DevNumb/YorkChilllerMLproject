@@ -1,0 +1,131 @@
+@startuml Maintenance Class Diagram
+title Figure X: Maintenance Module Class Diagram (Sprint 1 Refined)
+
+' Professional Class Diagram Styling
+skinparam class {
+    BackgroundColor #f0f7ff
+    BorderColor #0078d4
+    ArrowColor #0078d4
+}
+skinparam package {
+    BackgroundColor #ffffff
+    BorderColor #0078d4
+}
+
+package "UI Layer" {
+    class MaintenanceScheduler <<Component>> {
+        - tasks: Task[]
+        - historyEntries: HistoryEntry[]
+        - yearlyStats: YearlyStat[]
+        - completingTask: Task
+        - historyTask: Task
+        + loadTasks()
+        + handleComplete(data)
+        + handleAddTask(e)
+        + handleViewHistory(task)
+    }
+
+    class TaskItem <<Component>> {
+        - task: Task
+        + onComplete()
+        + onViewHistory()
+    }
+
+    class TaskHistory <<Component>> {
+        - entries: HistoryEntry[]
+        - taskName: string
+        - expanded: boolean
+        + onToggle()
+    }
+
+    class CompleteTaskModal <<Component>> {
+        - task: Task
+        + onSave(data)
+        + onClose()
+    }
+
+    class MaintenanceFilters <<Component>> {
+        - search: string
+        - category: string
+        - status: string
+        + onSearchChange(val)
+        + onCategoryChange(val)
+    }
+
+    class MaintenanceStats <<Component>> {
+        - tasks: Task[]
+    }
+
+    class YearlyTracker <<Component>> {
+        - year: number
+        - stats: YearlyStat[]
+    }
+
+    class ExportButton <<Component>> {
+        - tasks: Task[]
+        + printSchedule()
+    }
+}
+
+package "Service Layer" {
+    class SupabaseMaintenanceService <<Service>> {
+        + getAllTasks(): Task[]
+        + completeTask(taskId, data): Result
+        + getHistory(taskId): HistoryEntry[]
+        + getYearlyStats(year): YearlyStat[]
+        + addNewTask(task): Task
+        + refreshTaskStatuses(): Task[]
+        - mapTaskToDb(task)
+        - mapTaskFromDb(dbTask)
+    }
+}
+
+package "Models/Entities" {
+    class Task {
+        + id: string
+        + name: string
+        + category: string
+        + frequencyDays: number
+        + status: string
+        + nextDue: string
+        + priority: string
+        + assignedTo: string
+        + estimatedMinutes: number
+    }
+
+    class HistoryEntry {
+        + id: string
+        + taskId: string
+        + completedDate: string
+        + completedBy: string
+        + notes: string
+        + cost: number
+        + durationMinutes: number
+        + partsReplaced: string
+    }
+
+    class YearlyStat {
+        + year: number
+        + month: number
+        + taskId: string
+        + completedCount: number
+        + totalDurationMinutes: number
+        + averageCompletionDays: number
+    }
+}
+
+' Relationships
+MaintenanceScheduler ..> SupabaseMaintenanceService : uses
+MaintenanceScheduler "1" *-- "many" TaskItem
+MaintenanceScheduler "1" *-- "1" TaskHistory
+MaintenanceScheduler "1" *-- "1" CompleteTaskModal
+MaintenanceScheduler "1" *-- "1" MaintenanceFilters
+MaintenanceScheduler "1" *-- "1" MaintenanceStats
+MaintenanceScheduler "1" *-- "1" YearlyTracker
+MaintenanceScheduler "1" *-- "1" ExportButton
+
+SupabaseMaintenanceService ..> Task : manages
+SupabaseMaintenanceService ..> HistoryEntry : manages
+SupabaseMaintenanceService ..> YearlyStat : calculates
+
+@enduml

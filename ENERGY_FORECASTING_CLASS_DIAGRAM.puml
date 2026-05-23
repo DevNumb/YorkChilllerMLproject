@@ -1,0 +1,85 @@
+@startuml Energy Forecasting Class Diagram
+title Figure X: Energy Forecasting Class Diagram
+
+' Professional Class Diagram Styling
+skinparam class {
+    BackgroundColor #f0f7ff
+    BorderColor #0078d4
+    ArrowColor #0078d4
+}
+skinparam package {
+    BackgroundColor #ffffff
+    BorderColor #0078d4
+}
+
+package "UI Layer" {
+    class EnergyForecasting <<Component>> {
+        - tomorrowDate: string
+        - schedule24h: ForecastEntry[]
+        - dailySummary: DailySummary
+        - manualInputs: SimulationInputs
+        - manualOptimization: SimulationResult
+        + generateTomorrow24hSchedule()
+        + runManualOptimization()
+        + updateManualInput(name, value)
+    }
+}
+
+package "Service Layer" {
+    class ChillerOptimizer <<Control>> {
+        + calculateSavings(load, wetBulb, ...): SavingsResult
+    }
+
+    class ForecastingCache <<Utility>> {
+        + readForecastCache(): any
+        + writeForecastCache(payload): void
+        + readManualOptimizationCache(): any
+        + writeManualOptimizationCache(payload): void
+    }
+}
+
+package "External APIs" {
+    class MLModelAPI <<System>> {
+        + predict(features): kwPerTr
+    }
+}
+
+package "Models/Interfaces" {
+    class ForecastEntry {
+        + hour: string
+        + load: number
+        + wetBulb: number
+        + totalPower: number
+        + kwPerTr: number
+    }
+
+    class DailySummary {
+        + totalEnergy: number
+        + avgKwPerTr: number
+    }
+
+    class SimulationInputs {
+        + load_tons: number
+        + wet_bulb_c: number
+        + current_chw_setpoint_c: number
+        + chillers_running: number
+    }
+
+    class SimulationResult {
+        + kwPerTr: number
+        + totalPower: number
+        + powerSaved: number
+        + improvementPercent: number
+    }
+}
+
+' Relationships
+EnergyForecasting ..> ChillerOptimizer : uses
+EnergyForecasting ..> ForecastingCache : uses
+ChillerOptimizer ..> MLModelAPI : calls
+EnergyForecasting "1" *-- "many" ForecastEntry
+EnergyForecasting "1" *-- "1" DailySummary
+EnergyForecasting "1" *-- "1" SimulationInputs
+EnergyForecasting "1" *-- "1" SimulationResult
+
+@enduml

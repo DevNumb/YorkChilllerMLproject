@@ -1,0 +1,69 @@
+@startuml Create Task Sequence Diagram
+title Figure X: Maintenance - Create New Task Sequence Diagram
+
+' Professional Sequence Diagram Styling
+skinparam actorStyle awesome
+skinparam backgroundColor white
+skinparam handwritten false
+skinparam monochrome false
+skinparam shadowing false
+skinparam roundcorner 10
+skinparam ParticipantPadding 40
+skinparam BoxPadding 10
+
+skinparam sequence {
+    ArrowColor #0078d4
+    LifeLineBorderColor #0078d4
+    LifeLineBackgroundColor #f0f7ff
+    
+    ParticipantBackgroundColor #f0f7ff
+    ParticipantBorderColor #0078d4
+    ParticipantFontSize 14
+    ParticipantFontColor #0078d4
+    
+    ActorBackgroundColor #f0f7ff
+    ActorBorderColor #0078d4
+}
+
+actor "Maintenance Staff" as User
+participant "Maintenance Page" as UI <<Boundary>>
+participant "SupabaseMaintenanceService" as Service <<Control>>
+database "Supabase DB" as DB <<Database>>
+
+autonumber
+
+User -> UI : Click "+ Log Maintenance"
+activate UI
+UI -> UI : Open Add Task Modal
+
+User -> UI : Input Task Details (Name, Category, Frequency, etc.)
+User -> UI : Click "Add Task"
+
+UI -> Service : addNewTask(newTaskForm)
+activate Service
+
+Service -> Service : Prepare dbTask Object
+note right : Sets defaults:\nStatus = 'pending'\nNext Due = Now + Frequency
+
+Service -> DB : INSERT into maintenance_tasks
+activate DB
+DB --> Service : { data, error }
+deactivate DB
+
+Service --> UI : mapTaskFromDb(data)
+deactivate Service
+
+UI -> UI : showToast("Task added!")
+UI -> UI : setShowAddTask(false)
+UI -> UI : loadTasks()
+activate UI
+UI -> Service : getAllTasks()
+Service -> DB : SELECT * FROM maintenance_tasks
+DB --> Service : tasks
+Service --> UI : tasks
+deactivate UI
+
+UI --> User : Display Updated Task List
+deactivate UI
+
+@enduml

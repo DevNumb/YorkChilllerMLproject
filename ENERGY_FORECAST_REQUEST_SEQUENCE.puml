@@ -1,0 +1,79 @@
+@startuml Energy Forecast Request Sequence Diagram
+title Figure X: Energy Forecast Request Sequence Diagram (8-Point Batch)
+
+' Professional Sequence Diagram Styling
+skinparam actorStyle awesome
+skinparam backgroundColor white
+skinparam handwritten false
+skinparam monochrome false
+skinparam shadowing false
+skinparam roundcorner 10
+skinparam ParticipantPadding 40
+skinparam BoxPadding 10
+
+skinparam sequence {
+    ArrowColor #0078d4
+    LifeLineBorderColor #0078d4
+    LifeLineBackgroundColor #f0f7ff
+    
+    ParticipantBackgroundColor #f0f7ff
+    ParticipantBorderColor #0078d4
+    ParticipantFontSize 14
+    ParticipantFontColor #0078d4
+    
+    ActorBackgroundColor #f0f7ff
+    ActorBorderColor #0078d4
+}
+
+skinparam note {
+    BackgroundColor #fff9e6
+    BorderColor #d4a017
+    FontSize 11
+}
+
+actor "Plant Operator" as User
+participant "EnergyForecasting UI" as UI <<Boundary>>
+participant "ChillerOptimizer" as Optimizer <<Control>>
+participant "ML Model API" as ML <<External Service>>
+database "LocalStorage" as Cache <<Database>>
+
+autonumber
+
+User -> UI : Click "Refresh Forecast"
+activate UI
+
+UI -> UI : initializeProgress()
+note right: Tomorrow's Date & \nWeekend Status determined.
+
+loop For hour = 0, 3, 6, ..., 21 (8 iterations)
+    UI -> UI : Calculate Load/WB Proxies
+    note right: load = 1200 + 400 * sin(...)\nwb = 22 + 5 * sin(...)
+    
+    UI -> Optimizer : calculateSavings(load, wetBulb, hour, month, ...)
+    activate Optimizer
+    
+    Optimizer -> ML : POST features (Optimized Scenario)
+    activate ML
+    ML --> Optimizer : Efficiency Result (kW/ton)
+    deactivate ML
+    
+    Optimizer --> UI : { optimalConfig, savings }
+    deactivate Optimizer
+    
+    UI -> UI : Store point in schedule[]
+end
+
+UI -> UI : calculateDailySummary()
+note right: Sum(Power * 3) = total kWh\nAvg(Efficiency) = avg kW/ton
+
+UI -> Cache : writeForecastCache(schedule)
+activate Cache
+Cache --> UI : Success
+deactivate Cache
+
+UI -> UI : Update LineChart Data
+UI --> User : Display Tomorrow's Energy Profile
+
+deactivate UI
+
+@enduml

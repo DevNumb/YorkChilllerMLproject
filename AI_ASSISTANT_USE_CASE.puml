@@ -1,0 +1,41 @@
+@startuml AI Assistant Use Case Diagram
+
+left to right direction
+
+actor "Plant Operator" as Operator
+actor "AI Assistant" as Assistant <<AI Service>>
+actor "LLM API" as LLM <<System>>
+database "Dashboard Context" as Context <<System>>
+database "LocalStorage" as LS <<System>>
+
+package "AI Assistant Module" {
+    usecase "Ask Operational Questions" as UC_Chat
+    usecase "Explain Optimization Recommendations" as UC_Explain
+    usecase "Analyze System Health" as UC_Analyze
+    usecase "Generate Performance Charts" as UC_Charts
+    usecase "Manage Chat History" as UC_History
+    usecase "Create New Conversation" as UC_NewThread
+    usecase "Delete Conversation" as UC_Delete
+    usecase "Configure Assistant Settings" as UC_Settings
+}
+
+' Operator Actions
+Operator --> UC_Chat
+Operator --> UC_Explain
+Operator --> UC_Analyze
+Operator --> UC_Charts
+Operator --> UC_History
+Operator --> UC_NewThread
+Operator --> UC_Delete
+Operator --> UC_Settings
+
+' System & Assistant Interactions
+UC_Chat ..> Assistant : processed by
+UC_Explain ..> Assistant : processed by
+Assistant ..> LLM : calls for generation
+Assistant ..> Context : reads real-time state
+UC_Charts ..> Assistant : generates data
+UC_History ..> LS : reads/writes threads
+UC_Settings ..> LS : saves preferences
+
+@enduml

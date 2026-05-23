@@ -1,0 +1,48 @@
+@startuml Dashboard Module Use Case Diagram
+
+left to right direction
+
+actor "Plant Operator" as Operator
+actor "AI Assistant" as Assistant
+actor "Supabase" as DB <<System>>
+actor "ML Model API" as ML <<System>>
+actor "Weather API" as Weather <<System>>
+
+package "Dashboard Module" {
+    usecase "View Real-Time Efficiency" as UC_Status
+    usecase "Run Energy Optimization" as UC_Optimize
+    usecase "Manually Adjust Inputs" as UC_Inputs
+    usecase "Load Scenario Presets" as UC_Presets
+    usecase "View Optimization History" as UC_History
+    usecase "View Cost Savings & ROI" as UC_Savings
+    usecase "Monitor Faults & Anomalies" as UC_Faults
+    usecase "View Energy Forecasts" as UC_Forecast
+    usecase "Manage Maintenance Tasks" as UC_Maintenance
+    usecase "Chat for Operational Insights" as UC_Chat
+    usecase "Sync Weather Data" as UC_Weather
+}
+
+' Operator Actions
+Operator --> UC_Status
+Operator --> UC_Optimize
+Operator --> UC_Inputs
+Operator --> UC_Presets
+Operator --> UC_History
+Operator --> UC_Savings
+Operator --> UC_Faults
+Operator --> UC_Forecast
+Operator --> UC_Maintenance
+Operator --> UC_Chat
+
+' System Interactions
+UC_Optimize ..> ML : calls
+UC_Optimize ..> DB : saves result
+UC_History ..> DB : reads from
+UC_Savings ..> DB : reads from
+UC_Weather ..> Weather : fetches data
+UC_Forecast ..> ML : fetches data
+UC_Maintenance ..> DB : manages records
+UC_Chat ..> Assistant : interacts with
+UC_Chat ..> DB : fetches context
+
+@enduml

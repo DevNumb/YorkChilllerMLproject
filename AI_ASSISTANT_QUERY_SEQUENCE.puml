@@ -1,0 +1,74 @@
+@startuml AI Assistant Query Sequence Diagram
+title Figure X: AI Assistant Query Lifecycle Sequence Diagram
+
+' Professional Sequence Diagram Styling
+skinparam actorStyle awesome
+skinparam backgroundColor white
+skinparam handwritten false
+skinparam monochrome false
+skinparam shadowing false
+skinparam roundcorner 10
+skinparam ParticipantPadding 40
+skinparam BoxPadding 10
+
+skinparam sequence {
+    ArrowColor #0078d4
+    LifeLineBorderColor #0078d4
+    LifeLineBackgroundColor #f0f7ff
+    
+    ParticipantBackgroundColor #f0f7ff
+    ParticipantBorderColor #0078d4
+    ParticipantFontSize 14
+    ParticipantFontColor #0078d4
+    
+    ActorBackgroundColor #f0f7ff
+    ActorBorderColor #0078d4
+}
+
+skinparam note {
+    BackgroundColor #fff9e6
+    BorderColor #d4a017
+    FontSize 11
+}
+
+actor "Plant Operator" as User
+participant "AIChatAssistant" as UI <<Boundary>>
+participant "AssistantService" as Service <<Control>>
+participant "DashboardContext" as Context <<System>>
+participant "LLM (OpenRouter/AI)" as LLM <<External Service>>
+database "IndexedDB" as DB <<Database>>
+
+autonumber
+
+User -> UI : Submit Query (e.g., "Explain efficiency drop")
+activate UI
+
+UI -> UI : Add User Message to State
+UI -> Service : sendAssistantMessage(question, conversation)
+activate Service
+
+Service -> Context : getDashboardContext()
+activate Context
+note over Context : Aggregates Live Weather,\nOptimization Inputs,\nand Last Recommendation.
+Context --> Service : Normalized context JSON
+deactivate Context
+
+Service -> LLM : POST /api/assistant (Enriched Payload)
+activate LLM
+note right of Service : Payload = { question, context, history, model }
+LLM --> Service : JSON { reply, chart, suggestedTitle }
+deactivate LLM
+
+Service --> UI : Response Object
+deactivate Service
+
+UI -> UI : Process & Normalize Charts
+UI -> DB : saveAssistantThread(updatedThread)
+activate DB
+DB --> UI : Success
+deactivate DB
+
+UI --> User : Display AI Reply & Visual Charts
+deactivate UI
+
+@enduml

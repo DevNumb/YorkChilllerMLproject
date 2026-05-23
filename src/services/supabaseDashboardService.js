@@ -1,6 +1,43 @@
 import { supabase } from './supabaseClient';
 
 /**
+ * Save fault detection result to database
+ */
+export async function saveFaultDetectionHistory(data) {
+  try {
+    const { error } = await supabase
+      .from('fault_detection_history')
+      .insert({
+        cooling_load: data.cooling_load,
+        wet_bulb: data.wet_bulb,
+        chiller_data: data.chiller_data,
+        prediction: data.prediction,
+        fault_score: data.fault_score,
+        timestamp: new Date().toISOString()
+      });
+
+    if (error) throw error;
+  } catch (err) {
+    console.error('[Supabase] Failed to save fault history:', err);
+    throw err;
+  }
+}
+
+/**
+ * Get fault detection history
+ */
+export async function getFaultDetectionHistory(limit = 20) {
+  const { data, error } = await supabase
+    .from('fault_detection_history')
+    .select('*')
+    .order('timestamp', { ascending: false })
+    .limit(limit);
+
+  if (error) throw error;
+  return data;
+}
+
+/**
  * Maps Supabase snake_case to frontend camelCase
  */
 function mapHistoryFromDb(dbRecord) {
