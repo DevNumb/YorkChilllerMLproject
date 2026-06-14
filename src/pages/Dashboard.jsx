@@ -20,7 +20,7 @@ const monthOptions = [
 const scenarioPresets = [
   {
     label: 'Summer Peak',
-    icon: '🏭',
+    icon: '',
     values: {
       load_tons: 1800, wet_bulb_c: 26, current_chw_setpoint_c: 6, current_limit_pct: 100, hour: 14, month: 7, is_weekend: 0, chillers_running: 3,
       CHL_STA_1: 1, CHL_STA_2: 1, CHL_STA_3: 1,
@@ -31,7 +31,7 @@ const scenarioPresets = [
   },
   {
     label: 'Winter Night',
-    icon: '❄️',
+    icon: '',
     values: {
       load_tons: 400, wet_bulb_c: 5, current_chw_setpoint_c: 7, current_limit_pct: 70, hour: 2, month: 1, is_weekend: 0, chillers_running: 1,
       CHL_STA_1: 1, CHL_STA_2: 0, CHL_STA_3: 0,
@@ -157,9 +157,9 @@ function SystemStatusCard({ chillersRunning, efficiency, faultCount }) {
     <div className="system-status-card">
       <div className="system-status-header"><p className="section-label">System Status</p><h2>Real-Time Overview</h2></div>
       <div className="system-status-grid">
-        <div className="status-item"><span className="status-icon">❄️</span><div className="status-info"><span className="status-label">Chillers Running</span><strong className="status-value">{chillersRunning} / 4</strong></div></div>
-        <div className="status-item"><span className="status-icon">📊</span><div className="status-info"><span className="status-label">Current Efficiency</span><strong className="status-value" style={{ color: tone.color }}>{efficiency.toFixed(3)} kW/ton</strong></div></div>
-        <div className="status-item"><span className="status-icon">⚠️</span><div className="status-info"><span className="status-label">Active Faults</span><strong className="status-value" style={{ color: faultCount > 0 ? '#ff6b7d' : '#53f2a8' }}>{faultCount}</strong></div></div>
+        <div className="status-item"><span className="status-icon"></span><div className="status-info"><span className="status-label">Chillers Running</span><strong className="status-value">{chillersRunning} / 4</strong></div></div>
+        <div className="status-item"><span className="status-icon"></span><div className="status-info"><span className="status-label">Current Efficiency</span><strong className="status-value" style={{ color: tone.color }}>{efficiency.toFixed(3)} kW/ton</strong></div></div>
+        <div className="status-item"><span className="status-icon"></span><div className="status-info"><span className="status-label">Active Faults</span><strong className="status-value" style={{ color: faultCount > 0 ? '#ff6b7d' : '#53f2a8' }}>{faultCount}</strong></div></div>
       </div>
       <div className="system-status-footer">
         <span className="efficiency-badge" style={{ backgroundColor: `${tone.color}22`, color: tone.color }}>{tone.label}</span>
