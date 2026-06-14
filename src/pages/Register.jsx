@@ -152,12 +152,12 @@ export default function Register() {
             <p>Get real-time recommendations to reduce chiller plant energy consumption</p>
           </div>
           <div className="auth-info-card">
-            <span className="auth-info-icon">💰</span>
+            <span className="auth-info-icon"></span>
             <h3>Save Costs</h3>
             <p>Track savings and ROI from chiller staging and setpoint optimization</p>
           </div>
           <div className="auth-info-card">
-            <span className="auth-info-icon">📊</span>
+            <span className="auth-info-icon"></span>
             <h3>Monitor Performance</h3>
             <p>Access detailed analytics and historical optimization data</p>
           </div>

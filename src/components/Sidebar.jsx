@@ -47,24 +47,24 @@ export default function Sidebar() {
         </NavLink>
 
         <NavLink to="/chat" className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
-          <span className="nav-icon">💬</span>
+          <span className="nav-icon"></span>
           <span className="nav-label">AI Assistant</span>
         </NavLink>
 
         <NavLink to="/energy-forecast" className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
-          <span className="nav-icon">🔮</span>
+          <span className="nav-icon"></span>
           <span className="nav-label">Energy Forecast</span>
         </NavLink>
         <NavLink to="/maintenance-scheduler" className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
-          <span className="nav-icon">🛠️</span>
+          <span className="nav-icon"></span>
           <span className="nav-label">Maintenance</span>
         </NavLink>
         <NavLink to="/cost-savings" className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
-          <span className="nav-icon">💰</span>
+          <span className="nav-icon"></span>
           <span className="nav-label">Cost Savings</span>
         </NavLink>
         <NavLink to="/fault-detection" className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
-          <span className="nav-icon">🔍</span>
+          <span className="nav-icon"></span>
           <span className="nav-label">Fault Detection</span>
         </NavLink>
       </div>

@@ -143,12 +143,12 @@ export default function Login() {
             <p>Your data is protected with enterprise-grade security</p>
           </div>
           <div className="auth-info-card">
-            <span className="auth-info-icon">🌍</span>
+            <span className="auth-info-icon"></span>
             <h3>Multi-Site Support</h3>
             <p>Manage multiple chiller plants from one dashboard</p>
           </div>
           <div className="auth-info-card">
-            <span className="auth-info-icon">📱</span>
+            <span className="auth-info-icon"></span>
             <h3>Responsive Design</h3>
             <p>Access from desktop, tablet, or mobile device</p>
           </div>
